@@ -5,4 +5,4 @@ FILE(GLOB HEADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp ${CMAKE_CURRENT_SOURCE_DIR}/*.cuh, ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
 
 add_executable(LBVH ${SRC_FILES} ${HEADER_FILES})
-target_link_libraries(LBVH ${CUDA_LIBRARIES})
+target_link_libraries(LBVH Vector)

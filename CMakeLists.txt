@@ -7,7 +7,5 @@ find_package(CUDA REQUIRED)
 include_directories(${CUDA_INCLUDE_DIRS})
 
 include_directories(include/base)
-#include_directories(include/utility)
-
-#add_subdirectory(include)
+include_directories(src/common)
 add_subdirectory(src)

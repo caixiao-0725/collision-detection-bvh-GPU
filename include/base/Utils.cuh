@@ -21,4 +21,25 @@ __device__ uint morton3D(float x, float y, float z) {	///< Calculates a 30-bit M
 	return (xx * 4 + yy * 2 + zz);
 }
 
+__host__ __device__ __forceinline__ void FuncGetContinuousAABB(vec3f a0Curr, vec3f a1Curr, vec3f a2Curr,
+    vec3f a0Prev, vec3f a1Prev, vec3f a2Prev, float thickness, vec3f& aMin, vec3f& aMax)
+{
+    float aMaxX = fmaxf(a0Curr.x, fmaxf(a1Curr.x, a2Curr.x));
+    float aMaxY = fmaxf(a0Curr.y, fmaxf(a1Curr.y, a2Curr.y));
+    float aMaxZ = fmaxf(a0Curr.z, fmaxf(a1Curr.z, a2Curr.z));
+    aMaxX = fmaxf(fmaxf(aMaxX, a0Prev.x), fmaxf(a1Prev.x, a2Prev.x));
+    aMaxY = fmaxf(fmaxf(aMaxY, a0Prev.y), fmaxf(a1Prev.y, a2Prev.y));
+    aMaxZ = fmaxf(fmaxf(aMaxZ, a0Prev.z), fmaxf(a1Prev.z, a2Prev.z));
+
+    float aMinX = fminf(a0Curr.x, fminf(a1Curr.x, a2Curr.x));
+    float aMinY = fminf(a0Curr.y, fminf(a1Curr.y, a2Curr.y));
+    float aMinZ = fminf(a0Curr.z, fminf(a1Curr.z, a2Curr.z));
+    aMinX = fminf(fminf(aMinX, a0Prev.x), fminf(a1Prev.x, a2Prev.x));
+    aMinY = fminf(fminf(aMinY, a0Prev.y), fminf(a1Prev.y, a2Prev.y));
+    aMinZ = fminf(fminf(aMinZ, a0Prev.z), fminf(a1Prev.z, a2Prev.z));
+
+    aMin = vec3f(aMinX - thickness, aMinY - thickness, aMinZ - thickness);
+    aMax = vec3f(aMaxX + thickness, aMaxY + thickness, aMaxZ + thickness);
+}
+
 #endif

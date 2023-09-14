@@ -6,7 +6,10 @@ class AABB {
 public:
     vec3f _min, _max;
 public:
-    inline __host__ __device__ AABB();
+    inline __host__ __device__ AABB() {
+        _max = vec3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        _min = vec3f(FLT_MAX, FLT_MAX, FLT_MAX);
+    };
     __host__ __device__ AABB(const AABB& b)  { _min = b._min; _max = b._max; }
     __host__ __device__ AABB(AABB&& b)  { _min = b._min; _max = b._max; }
     __host__ __device__ AABB(const float &minx, const float &miny, const float &minz,
@@ -66,8 +69,11 @@ public:
 		_max = vec3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 		_min = vec3f(FLT_MAX, FLT_MAX, FLT_MAX);
 	}
+    __host__ __device__ void operator=(const AABB& aabb) {
+        _min = aabb._min;
+        _max = aabb._max;
+    }
 };
-inline __host__ __device__ AABB::AABB() { empty(); }
 
 using BOX = AABB;
 
