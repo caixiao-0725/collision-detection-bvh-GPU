@@ -5,6 +5,7 @@
 #include "bv.h"
 #include "device_launch_parameters.h"
 #include "atomicFunctions.cuh"
+#include <cuda_runtime.h>
 namespace CXE {
 	namespace BvhUtils {
 		using  uint = unsigned int;
@@ -36,14 +37,16 @@ namespace CXE {
 			//for (; idx < size; idx += gridDim.x * blockDim.x) {
 			__shared__ vec3f sMemAABBMin[K_THREADS];
 			__shared__ vec3f sMemAABBMax[K_THREADS];
-
 			BOX bv{};
-			auto v = _vertices[_faces[idx].x];
-			bv.combines(v.x, v.y, v.z);
-			v = _vertices[_faces[idx].y];
-			bv.combines(v.x, v.y, v.z);
-			v = _vertices[_faces[idx].z];
-			bv.combines(v.x, v.y, v.z);
+			vec3i pair = _faces[idx];
+
+			vec3f a1 = _vertices[_faces[idx].x];
+			vec3f a2 = _vertices[_faces[idx].x];
+			vec3f a3 = _vertices[_faces[idx].x];
+
+			bv.combines(a1.x, a1.y, a1.z);
+			bv.combines(a2.x, a2.y, a2.z);
+			bv.combines(a3.x, a3.y, a3.z);
 			
 
 			sMemAABBMin[threadIdx.x] = bv._min;
@@ -112,17 +115,21 @@ namespace CXE {
 			if (idx >= size) return;
 			//for (; idx < size; idx += gridDim.x * blockDim.x) {
 			BOX bv{};
-			auto v = _vertices[_faces[idx].x];
-			bv.combines(v.x, v.y, v.z);
-			v = _vertices[_faces[idx].y];
-			bv.combines(v.x, v.y, v.z);
-			v = _vertices[_faces[idx].z];
-			bv.combines(v.x, v.y, v.z);
+			vec3i pair = _faces[idx];
+			vec3f a1 = _vertices[pair.x];
+			vec3f a2 = _vertices[pair.y];
+			vec3f a3 = _vertices[pair.z];
+			
+			bv.combines(a1.x, a1.y, a1.z);
+			bv.combines(a2.x, a2.y, a2.z);
+			bv.combines(a3.x, a3.y, a3.z);
+
 			const vec3f c = bv.center();
 			const vec3f offset = c - scene[0]._min;
 			codes[idx] = morton3D(offset.x / scene[0].width(), offset.y / scene[0].height(), offset.z / scene[0].depth());
 			//}
 			if (idx == 0) printf("%f    %f    %f\n ", scene[0]._min.x, scene[0]._min.y, scene[0]._min.z);
+			if (idx == 0) printf("%f    %f    %f\n ", scene[0]._max.x, scene[0]._max.y, scene[0]._max.z);
 		}
 
         /// incoherent access, thus poor performance
@@ -131,6 +138,26 @@ namespace CXE {
             if (idx >= size) return;
             invMap[map[idx]] = idx;
         }
+
+		__global__ void buildPrimitives(int size, int* _idx, BOX* _bvh, int* _primMap,const vec3i* _faces,const vec3f* _vertices) {	///< update idx-th _bxs to idx-th leaf
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= size) return;
+			//for (; idx < size; idx += gridDim.x * blockDim.x) {
+			int newIdx = _primMap[idx];
+			BOX bv{};
+			auto v = _vertices[_faces[idx].x];
+			bv.combines(v.x, v.y, v.z);
+			v = _vertices[_faces[idx].y];
+			bv.combines(v.x, v.y, v.z);
+			v = _vertices[_faces[idx].z];
+			bv.combines(v.x, v.y, v.z);
+			//_prims.vida(newIdx) = _faces[idx].x;
+			//_prims.vidb(newIdx) = _faces[idx].y;
+			//_prims.vidc(newIdx) = _faces[idx].z;
+			_idx[newIdx] = idx;
+			_bvh[newIdx]= bv;
+			//}
+		}
 
 	}
 

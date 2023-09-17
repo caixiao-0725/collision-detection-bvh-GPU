@@ -22,14 +22,19 @@ int main() {
     float min_y = 100.0f;
     float min_z = 100.0f;
     for (int i = 0; i < meshB.nverts(); i++) {
-		//meshB.verts_[i].y -= 0.001f;
-  //      meshB.verts_[i].x -= 0.001f;
-  //      meshB.verts_[i].z -= 0.001f;
-        if (meshB.verts_[i].x < min_x) min_x = meshA.verts_[i].x;
-        if (meshB.verts_[i].y < min_y) min_y = meshA.verts_[i].y;
-        if (meshB.verts_[i].z < min_y) min_z = meshA.verts_[i].z;
+		meshA.verts_[i].x -= 0.001f;
+        meshA.verts_[i].y -= 0.001f;
+        meshA.verts_[i].z -= 0.001f;
+        meshB.verts_[i].x -= 0.001f;
+        meshB.verts_[i].y -= 0.001f;
+        meshB.verts_[i].z -= 0.001f;
+        if (meshA.verts_[i].x < min_x) min_x = meshA.verts_[i].x;
+        if (meshA.verts_[i].y < min_y) min_y = meshA.verts_[i].y;
+        if (meshA.verts_[i].z < min_z) min_z = meshA.verts_[i].z;
     }
+    printf("%f \n", min_x);
     printf("%f \n", min_y);
+    printf("%f \n", min_z);
 
     //两个模型的gpu顶点数据
     DeviceHostVector<vec3f> vertsA, vertsB;
@@ -43,7 +48,7 @@ int main() {
 
     Bvh A;
     A.setup(faceA.GetSize(), faceA.GetSize(), faceA.GetSize()-1);
-    A.build(vertsB.GetDevice(), faceB.GetDevice());
+    A.build(vertsA.GetDevice(), faceA.GetDevice());
   
 
 

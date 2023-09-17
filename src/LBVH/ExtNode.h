@@ -2,6 +2,7 @@
 #define _EXTNODE_H_
 
 #include "DeviceHostVector.h"
+#include "bv.h"
 
 namespace CXE {
 	class ExtNodeArray
@@ -13,6 +14,9 @@ namespace CXE {
 		int _extSize;
 
 		DeviceHostVector<int> Parent;
+		DeviceHostVector<int> mtCodes;
+		DeviceHostVector<int> idx;
+		DeviceHostVector<BOX> bvh;
 
 
 	};

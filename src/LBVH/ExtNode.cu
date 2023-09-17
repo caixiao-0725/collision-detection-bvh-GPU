@@ -5,5 +5,7 @@ using namespace CXE;
 void ExtNodeArray::setup(const int Prims, const int ExtSize) {
 	_prims = Prims;
 	_extSize = ExtSize;
-
+	mtCodes.Allocate(_prims);
+	bvh.Allocate(_prims);
+	idx.Allocate(_prims);
 }

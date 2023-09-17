@@ -34,6 +34,7 @@ namespace CXE {
 
 		thrust::device_vector<uint> d_keys32;
 		thrust::device_vector<int>  d_vals;
+		thrust::device_vector<int>  d_primMap;
 	};
 
 }
