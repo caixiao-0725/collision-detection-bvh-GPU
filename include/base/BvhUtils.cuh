@@ -5,6 +5,7 @@
 #include "bv.h"
 #include "device_launch_parameters.h"
 #include "atomicFunctions.cuh"
+#include "lbvh.h"
 #include <cuda_runtime.h>
 namespace CXE {
 	namespace BvhUtils {
@@ -40,9 +41,9 @@ namespace CXE {
 			BOX bv{};
 			vec3i pair = _faces[idx];
 
-			vec3f a1 = _vertices[_faces[idx].x];
-			vec3f a2 = _vertices[_faces[idx].x];
-			vec3f a3 = _vertices[_faces[idx].x];
+			vec3f a1 = _vertices[pair.x];
+			vec3f a2 = _vertices[pair.y];
+			vec3f a3 = _vertices[pair.z];
 
 			bv.combines(a1.x, a1.y, a1.z);
 			bv.combines(a2.x, a2.y, a2.z);
@@ -128,8 +129,8 @@ namespace CXE {
 			const vec3f offset = c - scene[0]._min;
 			codes[idx] = morton3D(offset.x / scene[0].width(), offset.y / scene[0].height(), offset.z / scene[0].depth());
 			//}
-			if (idx == 0) printf("%f    %f    %f\n ", scene[0]._min.x, scene[0]._min.y, scene[0]._min.z);
-			if (idx == 0) printf("%f    %f    %f\n ", scene[0]._max.x, scene[0]._max.y, scene[0]._max.z);
+			if (idx == 0) printf("MaxBox.max: %f    %f    %f\n ", scene[0]._min.x, scene[0]._min.y, scene[0]._min.z);
+			if (idx == 0) printf("MaxBox.min: %f    %f    %f\n ", scene[0]._max.x, scene[0]._max.y, scene[0]._max.z);
 		}
 
         /// incoherent access, thus poor performance
@@ -139,7 +140,7 @@ namespace CXE {
             invMap[map[idx]] = idx;
         }
 
-		__global__ void buildPrimitives(int size, int* _idx, BOX* _bvh, int* _primMap,const vec3i* _faces,const vec3f* _vertices) {	///< update idx-th _bxs to idx-th leaf
+		__global__ void buildPrimitives(int size, ExtNodeArray _prims, int* _primMap,const vec3i* _faces,const vec3f* _vertices) {	///< update idx-th _bxs to idx-th leaf
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= size) return;
 			//for (; idx < size; idx += gridDim.x * blockDim.x) {
@@ -154,11 +155,48 @@ namespace CXE {
 			//_prims.vida(newIdx) = _faces[idx].x;
 			//_prims.vidb(newIdx) = _faces[idx].y;
 			//_prims.vidc(newIdx) = _faces[idx].z;
-			_idx[newIdx] = idx;
-			_bvh[newIdx]= bv;
+			_prims.idx(newIdx) = idx;
+			_prims.box(newIdx)= bv;
 			//}
 		}
 
+		__global__ void buildIntNodes(int size, uint* _depths, ExtNodeArray _lvs, IntNodeArray _tks) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= size) return;
+			_lvs.lca(idx) = -1, _depths[idx] = 0;
+			int		l = idx - 1, r = idx;	///< (l, r]
+			bool	mark;
+
+			if (l >= 0)	mark = _lvs.getmetric(l) < _lvs.getmetric(r);
+			else		mark = false;
+			int		cur = mark ? l : r;
+			_lvs.par(idx) = cur;
+			if (mark)	_tks.rc(cur) = idx, _tks.rangey(cur) = idx, atomicOr(&_tks.mark(cur), 0x00000002), _lvs.mark(idx) = 0x00000007;
+			else		_tks.lc(cur) = idx, _tks.rangex(cur) = idx, atomicOr(&_tks.mark(cur), 0x00000001), _lvs.mark(idx) = 0x00000003;
+			
+			while (atomicAdd(&_tks.flag(cur), 1) == 1) {
+				//_tks.update(cur, _lvs);	/// Update
+				//_tks.refit(cur, _lvs);	/// Refit
+				_tks.mark(cur) &= 0x00000007;
+				if (idx < 10) printf("%d   %d\n", idx, _tks.mark(cur));
+				l = _tks.rangex(cur) - 1, r = _tks.rangey(cur);
+				_lvs.lca(l + 1) = cur/*, _tks.rcd(cur) = ++_lvs.rcl(r)*/, _depths[l + 1]++;
+				if (l >= 0)	mark = _lvs.metric(l) < _lvs.metric(r);	///< true when right child, false otherwise
+				else		mark = false;
+
+				if (l + 1 == 0 && r == size - 1) {
+					_tks.par(cur) = -1;
+					_tks.mark(cur) &= 0xFFFFFFFB;
+					break;
+				}
+
+				int par = mark ? l : r;
+				_tks.par(cur) = par;
+				if (mark)	_tks.rc(par) = cur, _tks.rangey(par) = r, atomicAnd(&_tks.mark(par), 0xFFFFFFFD), _tks.mark(cur) |= 0x00000004;
+				else		_tks.lc(par) = cur, _tks.rangex(par) = l + 1, atomicAnd(&_tks.mark(par), 0xFFFFFFFE), _tks.mark(cur) &= 0xFFFFFFFB;
+				cur = par;
+			}
+		}
 	}
 
 }
