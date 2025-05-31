@@ -9,6 +9,7 @@
 #include "thrust/sort.h"
 #include "thrust/device_vector.h"
 #include "CudaThrustUtils.hpp"
+#include "DeviceHostVector.h"
 
 namespace CXE {
 
@@ -18,7 +19,11 @@ namespace CXE {
 		~Bvh() {}
 		void setup(int prim_size,int ext_node_size,int int_node_size);
 		void build(const vec3f* vertices,const vec3i* faces);
+		void build(const AABB* boxs);
+		void query(const AABB* boxs, const uint num);
 
+
+		void reorderIntNodes();
 
 		int& primSize() { return _primSize; }
 		int& extSize() { return _extSize; }
@@ -26,16 +31,25 @@ namespace CXE {
 		BOX*& bv() { return _bv; }
 		ExtNodeArray& lvs() { return _extNodes; }
 		IntNodeArray& tks() { return _intNodes; }
+		IntNodeArray& untks() { return _unsortedTks; }
 
 		int	_primSize, _extSize, _intSize;
 		ExtNodeArray _extNodes;
 		IntNodeArray _intNodes;
+		IntNodeArray _unsortedTks;
 		BOX* _bv;
 
-		thrust::device_vector<uint> d_keys32;
-		thrust::device_vector<int>  d_vals;
-		thrust::device_vector<int>  d_primMap;
-		thrust::device_vector<uint>			d_count;
+		DeviceHostVector<uint> d_keys32;
+		DeviceHostVector<int>  d_vals;
+		DeviceHostVector<uint>  d_offsetTable;
+		DeviceHostVector<int>  d_primMap;				///< map from primitives to leaves
+		DeviceHostVector<int>  d_tkMap;
+
+		DeviceHostVector<uint> d_count;
+		DeviceHostVector<AABB> d_bv;
+
+		DeviceHostVector<int> _cpNum;
+		DeviceHostVector<int2> _cpRes;
 	};
 
 }

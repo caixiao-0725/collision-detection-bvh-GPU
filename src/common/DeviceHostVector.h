@@ -8,7 +8,7 @@ namespace CXE
 	template <typename T>
 	class DeviceHostVector
 	{
-	private:
+	public:
 		// Device memory pointer
 		T *ptr = nullptr;
 
@@ -66,8 +66,6 @@ namespace CXE
 
 		// Get size
 		size_t GetSize() const { return size; }
-
-		//size_t size() const { return size; }
 
 		// Allocate and set capacity
 		void Allocate(size_t newSize);

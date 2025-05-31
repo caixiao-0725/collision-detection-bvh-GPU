@@ -1,9 +1,16 @@
 #ifndef _EXTNODE_H_
 #define _EXTNODE_H_
 
-#include "DeviceHostVector.h"
-
-#include "bv.h"
+#include <cuda_runtime.h>
+#include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
+#include "../common/DeviceHostVector.h"
+#include "../common/HelperCuda.h"
+#include "../../include/base/origin.h"
+#include "../../include/base/bv.h"
+#include "../../include/base/CudaThrustUtils.hpp"
+#include "../common/HelperMath.h"
 
 namespace CXE {
 	class ExtNodeArray
@@ -14,27 +21,33 @@ namespace CXE {
 		void clearExtNodes(int size);
 		void calcSplitMetrics(int extsize);
 
-		uint* getMtCodes() { return static_cast<uint*>(_attribs[MTCODE]); }
-		int* getIdx() { return static_cast<int*>(_attribs[IDX]); }
-		BOX* getBox() { return static_cast<BOX*>(_attribs[AABB]); }
-		uint* getMarks() { return static_cast<uint*>(_attribs[MARK]); }
-		int* getExtIds() { return static_cast<int*>(_attribs[EXT_NO]); }
-		int* getMetrics() { return static_cast<int*>(_attribs[SPLIT_METRIC]); }
+		unsigned int* getMtCodes() { return _mtcode; }
+		int* getIdx() { return _idx; }
+		BOX* getBox() { return _box; }
+		unsigned int* getMarks() { return _mark; }
+		int* getExtIds() { return _extId; }
+		int* getMetrics() { return _metric; }
+		int* getLCA() { return _lca; }
 
-		__device__ int getmetric(int i) const { return ((int*)_attribs[SPLIT_METRIC])[i]; }
+		__device__ int getmetric(int i) const { return _metric.ptr[i]; }
+		__device__ int& idx(int i) { return ((int*)_idx.ptr)[i]; }
+		__device__ unsigned int& mtcode(int i) { return _mtcode.ptr[i]; }
+		__device__ BOX& box(int i) { return _box.ptr[i]; }
+		__device__ int& lca(int i) { return _lca.ptr[i]; }
+		__device__ int& metric(int i) { return _metric.ptr[i]; }
+		__device__ int& par(int i) { return _par.ptr[i]; }
+		__device__ unsigned int& mark(int i) { return _mark.ptr[i]; }
 
-		__device__ int& idx(int i) { return ((int*)_attribs[IDX])[i]; }
-		__device__ uint& mtcode(int i) { return ((uint*)_attribs[MTCODE])[i]; }
-		__device__ BOX& box(int i) { return ((BOX*)_attribs[AABB])[i]; }
-		__device__ int& lca(int i) { return ((int*)_attribs[LCA])[i]; }
-		__device__ int& metric(int i) { return ((int*)_attribs[SPLIT_METRIC])[i]; }
-		__device__ int& par(int i) { return ((int*)_attribs[PAR])[i]; }
-		__device__ uint& mark(int i) { return ((uint*)_attribs[MARK])[i]; }
-
-		enum { MTCODE, IDX , AABB , MARK, EXT_NO, PAR, SPLIT_METRIC,LCA};
-		void* _attribs[10];
 		int _prims;
 		int _extSize;
+		DeviceHostVector<unsigned int> _mtcode;
+		DeviceHostVector<int> _idx;
+		DeviceHostVector<BOX> _box;
+		DeviceHostVector<int> _lca;
+		DeviceHostVector<int> _metric;
+		DeviceHostVector<int> _par;   //parent node idx
+		DeviceHostVector<int> _extId;
+		DeviceHostVector<unsigned int> _mark;
 	};
 }
 

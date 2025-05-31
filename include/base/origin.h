@@ -1,6 +1,20 @@
 #ifndef __VEC_H__
 #define __VEC_H__
 #include <thrust/extrema.h>
+
+template <typename T>
+__device__ __host__ inline T __mm_min(T a, T b)
+{
+	return a > b ? b : a;
+}
+
+
+template <typename T>
+__device__ __host__ inline T __mm_max(T a, T b)
+{
+    return a > b ? a : b;
+}
+
 template <typename T>
 struct vec3
 {
