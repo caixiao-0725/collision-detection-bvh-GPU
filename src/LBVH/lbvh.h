@@ -4,6 +4,7 @@
 #include "bv.h"
 #include "IntNode.h"
 #include "ExtNode.h"
+#include "MergeNode.h"
 
 #include "thrust/sequence.h"
 #include "thrust/sort.h"
@@ -37,6 +38,7 @@ namespace CXE {
 		ExtNodeArray _extNodes;
 		IntNodeArray _intNodes;
 		IntNodeArray _unsortedTks;
+		MergeNodeArray _mergeNodes;
 		BOX* _bv;
 
 		DeviceHostVector<uint> d_keys32;
@@ -50,6 +52,10 @@ namespace CXE {
 
 		DeviceHostVector<int> _cpNum;
 		DeviceHostVector<int2> _cpRes;
+
+		int _type = 2;  // 1. SOA stackless query 
+						// 2. SOA stack 32 query
+						// 3. AOS stack 32 query 
 	};
 
 }

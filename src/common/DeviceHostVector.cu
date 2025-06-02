@@ -72,6 +72,7 @@ namespace CXE
     template class DeviceHostVector<vec3i>;
     template class DeviceHostVector<vec2i>;
     template class DeviceHostVector<AABB>;
+    template class DeviceHostVector<bvhNode>;
     //template class DeviceHostVector<Utils::CollsionPair>;
 
     // Allocate and set capacity

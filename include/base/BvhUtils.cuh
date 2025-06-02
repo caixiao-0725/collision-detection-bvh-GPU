@@ -464,9 +464,28 @@ namespace CXE {
 			_tks_par[newId] = mark_ != -1 ? _tkMap[mark_] : -1;
 			_tks_rangex[newId] = _unorderedTks_rangex[idx];
 			_tks_rangey[newId] = _unorderedTks_rangey[idx];
-			//if (newId == 0) printf("%d  %d\n", mark_, idx);
-			//_tks.rcd(newId) = _rcls[mark] - _unorderedTks.getrcd(idx);
 			_tks_box[newId] = _unorderedTks_box[idx];
+		}
+
+		__global__ void reorderMergeNode(int intSize, const int* _tkMap,
+			bvhNode* _mergeNode,BOX* _extBox,BOX* _intBox,
+			int* _unorderedTks_lc, int* _unorderedTks_rc, 
+			uint* _unorderedTks_mark,int* _unorderedTks_par) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= intSize) return;
+			int newId = _tkMap[idx];
+			uint mark = _unorderedTks_mark[idx];
+			bvhNode temp;
+			temp.mark = mark;
+			temp.lc = mark & 1 ? _unorderedTks_lc[idx] : _tkMap[_unorderedTks_lc[idx]];
+			temp.rc = mark & 2 ? _unorderedTks_rc[idx] : _tkMap[_unorderedTks_rc[idx]];
+			temp.bounds[0] = mark & 1 ? _extBox[temp.lc] : _intBox[_unorderedTks_lc[idx]];
+			temp.bounds[1] = mark & 2 ? _extBox[temp.rc] : _intBox[_unorderedTks_rc[idx]];
+	
+			int mark_ = _unorderedTks_par[idx];
+			temp.par = mark_ != -1 ? _tkMap[mark_] : -1;
+			
+			_mergeNode[newId] = temp;
 		}
 
 
@@ -488,9 +507,9 @@ namespace CXE {
 				else	t = st - 1, lbd = st;
 				if (st > t) {
 					if (_lvs_box[lbd].overlaps(bv)){
-						//int temp_idx = _lvs_idx[lbd];
-						//if(temp_idx < idx)
-							//_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						int temp_idx = _lvs_idx[lbd];
+						if(temp_idx < idx)
+							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
 					}
 					st = _lvs_lca[lbd + 1];
 				}
@@ -542,6 +561,46 @@ namespace CXE {
 				else {
 					if (bv.overlaps(_tks_box[idxR])) {
 						*(stackPtr++) = idxR;
+					}
+				}
+
+			}
+		}
+
+		__global__ void pureMergeBvhStackCD(uint travPrimSize, const BOX* _box,
+			bvhNode* _nodes, int* _lvs_idx,
+			int* _cpNum, int2* _cpRes) {
+			int idx = threadIdx.x + blockIdx.x * blockDim.x;
+			if (idx >= travPrimSize) return;
+			const BOX bv = _box[idx];
+
+			uint32_t stack[32];			// This is dynamically sized through templating
+			uint32_t* stackPtr = stack;
+			*(stackPtr++) = 0;					// Push
+			int temp_idx;
+			while (stackPtr != stack) {
+				uint32_t nodeIdx = *(--stackPtr);	// Pop
+				bvhNode node = _nodes[nodeIdx];
+
+				if (bv.overlaps(node.bounds[0])) {
+					if (node.mark & 1) {
+						if (temp_idx < idx)
+							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+
+					}
+					else {
+						*(stackPtr++) = node.lc;
+					}
+				}
+
+				if (bv.overlaps(node.bounds[1])) {
+					if (node.mark & 2) {
+						if (temp_idx < idx)
+							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+
+					}
+					else {
+						*(stackPtr++) = node.rc;
 					}
 				}
 

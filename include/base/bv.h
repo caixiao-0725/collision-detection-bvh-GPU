@@ -75,6 +75,16 @@ public:
     }
 };
 
+struct __align__(64) bvhNode {
+    int par;
+    int lc;
+    int rc;
+    unsigned int mark;
+
+    AABB bounds[2];
+};
+
+
 using BOX = AABB;
 
 #endif // __BV_H_

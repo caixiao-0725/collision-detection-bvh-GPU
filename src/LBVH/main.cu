@@ -57,7 +57,7 @@ int main0() {
 }
 
 int main() {
-    const int N = 100000;
+    const int N =  100000;
     const float R = 0.001f;
 
     printf("Generating Data...\n");
