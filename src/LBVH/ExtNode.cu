@@ -46,6 +46,7 @@ int ExtNodeArray::buildExtNodes(int primsize) {
 	return extSize;
 }
 
+
 void ExtNodeArray::clearExtNodes(int size) {
 	cudaMemset(_par, 0xff, sizeof(int) * size);
 

@@ -2,6 +2,8 @@
 #define __VEC_H__
 #include <thrust/extrema.h>
 
+using  uint = unsigned int;
+
 template <typename T>
 __device__ __host__ inline T __mm_min(T a, T b)
 {

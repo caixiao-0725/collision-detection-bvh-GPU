@@ -21,7 +21,7 @@ namespace CXE {
 		void setup(int prim_size,int ext_node_size,int int_node_size);
 		void build(const vec3f* vertices,const vec3i* faces);
 		void build(const AABB* boxs);
-		void query(const AABB* boxs, const uint num);
+		void query(const AABB* boxs, const uint num,bool self);
 
 
 		void reorderIntNodes();
@@ -33,12 +33,16 @@ namespace CXE {
 		ExtNodeArray& lvs() { return _extNodes; }
 		IntNodeArray& tks() { return _intNodes; }
 		IntNodeArray& untks() { return _unsortedTks; }
+		MergeNodeArray& mgs() { return _mergeNodes; }
 
 		int	_primSize, _extSize, _intSize;
 		ExtNodeArray _extNodes;
 		IntNodeArray _intNodes;
 		IntNodeArray _unsortedTks;
 		MergeNodeArray _mergeNodes;
+		StacklessMergeNodeArray _stacklessMergeNodes;
+		StacklessMergeNodeV1Array _stacklessMergeNodesV1;
+
 		BOX* _bv;
 
 		DeviceHostVector<uint> d_keys32;
@@ -53,9 +57,13 @@ namespace CXE {
 		DeviceHostVector<int> _cpNum;
 		DeviceHostVector<int2> _cpRes;
 
-		int _type = 2;  // 1. SOA stackless query 
-						// 2. SOA stack 32 query
-						// 3. AOS stack 32 query 
+		int _type =  4; // 0. SOA stackless query     bottom to top tree build
+						// 1. SOA stack 32 query      bottom to top tree build
+						// 2. AOS stack 32 query      bottom to top tree build
+						// 3. AOS stackless query     bottom to top tree build
+						// 4. faster AOS stackless query     bottom to top tree build
+						// 11.AOS stack 32 query      binary search tree build
+						// 12.AOS stack 32 query      binary search tree build    sort query elements
 	};
 
 }

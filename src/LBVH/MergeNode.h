@@ -8,10 +8,29 @@ namespace CXE {
 	class MergeNodeArray {
 	public:
 		void setup(const int Size);
+		void clearFlags();
 
+		uint _size;
 		DeviceHostVector<bvhNode> _nodes;
+		DeviceHostVector<int> _flags;
 	};
 
+	class StacklessMergeNodeArray {
+	public:
+		void setup(const int Size);
+
+		uint _size;
+		DeviceHostVector<bvhNodeV2> _nodes;
+	};
+
+	class StacklessMergeNodeV1Array {
+	public:
+		void setup(const int Size);
+
+		uint _size;
+		DeviceHostVector<bvhNodeV1> _nodes;
+	};
+	
 }
  
 

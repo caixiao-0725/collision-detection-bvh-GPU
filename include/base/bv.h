@@ -75,10 +75,23 @@ public:
     }
 };
 
-struct __align__(64) bvhNode {
-    int par;
+
+struct __align__(32) bvhNodeV2 {
+    int rangex;
+    int rangey;
+    AABB bound;
+};
+
+struct __align__(32) bvhNodeV1 {
     int lc;
-    int rc;
+    int escape;
+    AABB bound;
+};
+
+struct __align__(64) bvhNode {
+    uint par;            
+    uint lc;             // MSB is used to indicate whether this is a leaf node.
+    uint rc;             // MSB is used to indicate whether this is a leaf node.
     unsigned int mark;
 
     AABB bounds[2];

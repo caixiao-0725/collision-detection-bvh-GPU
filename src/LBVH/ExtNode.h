@@ -35,7 +35,7 @@ namespace CXE {
 		__device__ BOX& box(int i) { return _box.ptr[i]; }
 		__device__ int& lca(int i) { return _lca.ptr[i]; }
 		__device__ int& metric(int i) { return _metric.ptr[i]; }
-		__device__ int& par(int i) { return _par.ptr[i]; }
+		__device__ uint& par(int i) { return _par.ptr[i]; }
 		__device__ unsigned int& mark(int i) { return _mark.ptr[i]; }
 
 		int _prims;
@@ -45,7 +45,7 @@ namespace CXE {
 		DeviceHostVector<BOX> _box;
 		DeviceHostVector<int> _lca;
 		DeviceHostVector<int> _metric;
-		DeviceHostVector<int> _par;   //parent node idx
+		DeviceHostVector<uint> _par;   //parent node idx
 		DeviceHostVector<int> _extId;
 		DeviceHostVector<unsigned int> _mark;
 	};

@@ -357,7 +357,7 @@ namespace CXE {
 
 
 		__global__ void buildIntNodes(int size, uint* _depths,
-			int* _lvs_lca,int* _lvs_metric,int* _lvs_par,uint* _lvs_mark, BOX* _lvs_box,
+			int* _lvs_lca,int* _lvs_metric,uint* _lvs_par,uint* _lvs_mark, BOX* _lvs_box,
 			int* _tks_rc,int*_tks_lc,int* _tks_range_y, int* _tks_range_x,uint* _tks_mark, BOX* _tks_box, uint* _flag,int* _tks_par) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= size) return;
@@ -432,7 +432,7 @@ namespace CXE {
 			//}
 		}
 
-		__global__ void updateBvhExtNodeLinks(int size, const int* _mapTable, int* _lcas, int* _pars) {
+		__global__ void updateBvhExtNodeLinks(int size, const int* _mapTable, int* _lcas, uint* _pars) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= size) return;
 			int ori;
@@ -467,6 +467,76 @@ namespace CXE {
 			_tks_box[newId] = _unorderedTks_box[idx];
 		}
 
+		__global__ void reorderIntNodeV1(int intSize, const int* _tkMap,int* _lvs_lca, AABB* _lvs_box,
+			int* _unorderedTks_lc, uint* _unorderedTks_mark,  int* _unorderedTks_rangey, AABB* _unorderedTks_box,
+			bvhNodeV1* _nodes
+		) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= intSize + 1) return;
+
+			bvhNodeV1 node;
+			node.lc = -1;
+			int escape = _lvs_lca[idx + 1];
+			
+			if (escape == -1) {
+				node.escape = -1;
+			}
+			else {
+				int bLeaf = escape & 1;
+				escape >>= 1;
+				node.escape = escape + (bLeaf ? intSize : 0);
+			}
+			node.bound = _lvs_box[idx];
+			
+
+			_nodes[idx + intSize] = node;
+
+			if (idx >= intSize) return;
+
+			bvhNodeV1 internalNode;
+			int newId = _tkMap[idx];
+			uint mark = _unorderedTks_mark[idx];
+
+			internalNode.lc = mark & 1 ? _unorderedTks_lc[idx] + intSize: _tkMap[_unorderedTks_lc[idx]];
+			internalNode.bound = _unorderedTks_box[idx];
+
+			int internalEscape = _lvs_lca[_unorderedTks_rangey[idx] + 1];
+
+			if (internalEscape == -1) {
+				internalNode.escape = -1;
+			}
+			else {
+				int bLeaf = internalEscape & 1;
+				internalEscape >>= 1;
+				internalNode.escape = internalEscape + (bLeaf ? intSize : 0);
+			}
+			_nodes[newId] = internalNode;
+		}
+
+		__global__ void reorderIntNodeSoa(int intSize, const int* _tkMap,
+			int* _unorderedTks_lc, int* _unorderedTks_rc, uint* _unorderedTks_mark, int* _unorderedTks_par, int* _unorderedTks_rangex, int* _unorderedTks_rangey, AABB* _unorderedTks_box,
+			int* _tks_lc, int* _tks_rc, uint* _tks_mark, int* _tks_par, bvhNodeV2* _nodes) 
+		{
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= intSize) return;
+			int newId = _tkMap[idx];
+			uint mark = _unorderedTks_mark[idx];
+
+			_tks_lc[newId] = mark & 1 ? _unorderedTks_lc[idx] : _tkMap[_unorderedTks_lc[idx]];
+			_tks_rc[newId] = mark & 2 ? _unorderedTks_rc[idx] : _tkMap[_unorderedTks_rc[idx]];
+			_tks_mark[newId] = mark;
+			int mark_ = _unorderedTks_par[idx];
+			
+			_tks_par[newId] = mark_ != -1 ? _tkMap[mark_] : -1;
+
+			bvhNodeV2 node;
+			node.rangex = _unorderedTks_rangex[idx];
+			node.rangey = _unorderedTks_rangey[idx];
+			node.bound = _unorderedTks_box[idx];
+			
+			_nodes[newId] = node;
+		}
+
 		__global__ void reorderMergeNode(int intSize, const int* _tkMap,
 			bvhNode* _mergeNode,BOX* _extBox,BOX* _intBox,
 			int* _unorderedTks_lc, int* _unorderedTks_rc, 
@@ -476,21 +546,21 @@ namespace CXE {
 			int newId = _tkMap[idx];
 			uint mark = _unorderedTks_mark[idx];
 			bvhNode temp;
-			temp.mark = mark;
-			temp.lc = mark & 1 ? _unorderedTks_lc[idx] : _tkMap[_unorderedTks_lc[idx]];
-			temp.rc = mark & 2 ? _unorderedTks_rc[idx] : _tkMap[_unorderedTks_rc[idx]];
-			temp.bounds[0] = mark & 1 ? _extBox[temp.lc] : _intBox[_unorderedTks_lc[idx]];
-			temp.bounds[1] = mark & 2 ? _extBox[temp.rc] : _intBox[_unorderedTks_rc[idx]];
+			//temp.mark = mark;
+			temp.lc = mark & 1 ? ((uint)_unorderedTks_lc[idx]) | 0x80000000 : _tkMap[_unorderedTks_lc[idx]];
+			temp.rc = mark & 2 ? ((uint)_unorderedTks_rc[idx]) | 0x80000000 : _tkMap[_unorderedTks_rc[idx]];
+			temp.bounds[0] = mark & 1 ? _extBox[_unorderedTks_lc[idx]] : _intBox[_unorderedTks_lc[idx]];
+			temp.bounds[1] = mark & 2 ? _extBox[_unorderedTks_rc[idx]] : _intBox[_unorderedTks_rc[idx]];
 	
 			int mark_ = _unorderedTks_par[idx];
-			temp.par = mark_ != -1 ? _tkMap[mark_] : -1;
+			temp.par = mark_ != -1 ? _tkMap[mark_] : 0;
 			
 			_mergeNode[newId] = temp;
 		}
 
-
-		__global__ void pureBvhInterCD(uint travPrimSize, const BOX* _box, 
-			const int* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box,const int* _lvs_lca,
+		template<bool SELF>
+		__global__ void pureBvhStacklessCD(uint travPrimSize, const BOX* _box, 
+			const uint* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box,const int* _lvs_lca,
 			const BOX* _tks_box, const int* _tks_rangex, const int* _tks_rangey,
 			int* _cpNum, int2* _cpRes) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -505,11 +575,15 @@ namespace CXE {
 				st >>= 1;
 				if (!t)	for (t = _lvs_par[lbd = _tks_rangex[st]]; st <= t && _tks_box[st].overlaps(bv); st++);
 				else	t = st - 1, lbd = st;
+
 				if (st > t) {
 					if (_lvs_box[lbd].overlaps(bv)){
 						int temp_idx = _lvs_idx[lbd];
-						if(temp_idx < idx)
-							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						//if (SELF){
+						//	if (temp_idx < idx) 
+						//		_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						//}
+						//else _cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
 					}
 					st = _lvs_lca[lbd + 1];
 				}
@@ -519,22 +593,93 @@ namespace CXE {
 			} while (st != -1);
 		}
 
-		
+		template<bool SELF>
+		__global__ void AosBvhStacklessCD(uint travPrimSize, const BOX* _box,
+			const uint* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box, const int* _lvs_lca,
+			const bvhNodeV2* _nodes,
+			int* _cpNum, int2* _cpRes) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= travPrimSize) return;
+
+			int	lbd;
+			int st = 0;
+			bvhNodeV2 node;
+			const BOX bv = _box[idx];
+			do {
+				int t = st & 1;
+				st >>= 1;
+				if (!t)
+				{
+					node = _nodes[st];
+					lbd = node.rangex;
+					for (t = _lvs_par[lbd]; st <= t && node.bound.overlaps(bv); node = _nodes[st++]);
+				}	
+				else	t = st - 1, lbd = st;
+				if (st > t) {
+					if (_lvs_box[lbd].overlaps(bv)) {
+						int temp_idx = _lvs_idx[lbd];
+						//if (SELF) {
+						//	if (temp_idx < idx)
+						//		_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						//}
+						//else _cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+					}
+					st = _lvs_lca[lbd + 1];
+				}
+				else {
+					st = _lvs_lca[node.rangey + 1];
+				}
+			} while (st != -1);
+		}
+
+		template<bool SELF>
+		__global__ void AosBvhStacklessCDV1(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const bvhNodeV1* _nodes,
+			int* _cpNum, int2* _cpRes) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= Size) return;
+			bvhNodeV1 node;
+			int st = 0;
+			const BOX bv = _box[idx];
+			do {
+				node = _nodes[st];
+				if (node.bound.overlaps(bv)) {
+					if (node.lc == -1) {
+						int temp_idx = _lvs_idx[st - intSize];
+						if (SELF) {
+							if (temp_idx < idx)
+								_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						}
+						else _cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						st = node.escape;
+					}
+					else {
+						st = node.lc;
+					}
+				}
+				else {
+					st = node.escape;
+				}
+			} while (st != -1);
+		}
+
+		template<bool SELF>
 		__global__ void pureBvhStackCD(uint travPrimSize, const BOX* _box,
-			const int* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box, const int* _lvs_lca,
+			const uint* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box, const int* _lvs_lca,
 			const BOX* _tks_box, const int* _tks_lc, const int* _tks_rc, const uint* _tks_mark,
 			int* _cpNum, int2* _cpRes) {
 			int idx = threadIdx.x + blockIdx.x * blockDim.x;
 			if (idx >= travPrimSize) return;
 			const BOX bv = _box[idx];
 
-			uint32_t stack[32];			// This is dynamically sized through templating
-			uint32_t* stackPtr = stack;
+			uint stack[32];			// This is dynamically sized through templating
+			uint* stackPtr = stack;
 			*(stackPtr++) = 0;					// Push
 			int idxL, idxR, temp_idx;
 			uint mark;
 			while (stackPtr != stack) {
-				uint32_t nodeIdx = *(--stackPtr);	// Pop
+				uint nodeIdx = *(--stackPtr);	// Pop
 				
 				idxL = _tks_lc[nodeIdx];
 				idxR = _tks_rc[nodeIdx];
@@ -543,8 +688,13 @@ namespace CXE {
 				if (mark & 1) {
 					temp_idx = _lvs_idx[idxL];
 					if (_lvs_box[idxL].overlaps(bv))
-						if (temp_idx < idx)
+						if (SELF){
+							if (temp_idx < idx) 
+								_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);				
+						}
+						else {
 							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						}
 				}
 				else {
 					if (bv.overlaps(_tks_box[idxL])) {
@@ -555,8 +705,13 @@ namespace CXE {
 				if (mark & 2) {
 					temp_idx = _lvs_idx[idxR];
 					if (_lvs_box[idxR].overlaps(bv))
-						if (temp_idx < idx)
+						if (SELF) {
+							if (temp_idx < idx)
+								_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						}
+						else {
 							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						}
 				}
 				else {
 					if (bv.overlaps(_tks_box[idxR])) {
@@ -567,6 +722,7 @@ namespace CXE {
 			}
 		}
 
+		template<bool SELF>
 		__global__ void pureMergeBvhStackCD(uint travPrimSize, const BOX* _box,
 			bvhNode* _nodes, int* _lvs_idx,
 			int* _cpNum, int2* _cpRes) {
@@ -574,34 +730,95 @@ namespace CXE {
 			if (idx >= travPrimSize) return;
 			const BOX bv = _box[idx];
 
-			uint32_t stack[32];			// This is dynamically sized through templating
-			uint32_t* stackPtr = stack;
+			int stack[32];			// This is dynamically sized through templating
+			int* stackPtr = stack;
 			*(stackPtr++) = 0;					// Push
 			int temp_idx;
 			while (stackPtr != stack) {
+				//int nodeIdx = *(--stackPtr);	// Pop
+				//bvhNode node = _nodes[nodeIdx];
+				//
+				//if (bv.overlaps(node.bounds[0])) {
+				//	if (node.lc & 0x80000000) {
+				//		temp_idx = _lvs_idx[node.lc & 0x7fffffff];
+				//		if (temp_idx < idx) 
+				//			_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);	
+				//	}
+				//	else {
+				//		*(stackPtr++) = node.lc;
+				//	}
+				//}
+				//
+				//if (bv.overlaps(node.bounds[1])) {
+				//	if (node.rc & 0x80000000) {
+				//		temp_idx = _lvs_idx[node.rc & 0x7fffffff];
+				//		if (temp_idx < idx)
+				//			_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+				//
+				//	}
+				//	else {
+				//		*(stackPtr++) = node.rc;
+				//	}
+				//}
+
 				uint32_t nodeIdx = *(--stackPtr);	// Pop
-				bvhNode node = _nodes[nodeIdx];
+				bool isLeaf = nodeIdx & 0x80000000;
+				nodeIdx = nodeIdx & 0x7FFFFFFF;
+
+				if (isLeaf) {
+					temp_idx = _lvs_idx[nodeIdx];
+					//if (SELF)
+					//	if (temp_idx >= idx) continue;
+					//_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+					continue;
+				}
+
+				auto node = _nodes[nodeIdx];
 
 				if (bv.overlaps(node.bounds[0])) {
-					if (node.mark & 1) {
-						if (temp_idx < idx)
-							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
-
-					}
-					else {
-						*(stackPtr++) = node.lc;
-					}
+					*(stackPtr++) = node.lc;
 				}
 
 				if (bv.overlaps(node.bounds[1])) {
-					if (node.mark & 2) {
-						if (temp_idx < idx)
-							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+					*(stackPtr++) = node.rc;
+				}
 
-					}
-					else {
-						*(stackPtr++) = node.rc;
-					}
+			}
+		}
+
+		template<bool SELF>
+		__global__ void pureMergeBvhStackSortElementCD(uint travPrimSize, const BOX* _box,
+			bvhNode* _nodes, int* _lvs_idx,
+			int* _cpNum, int2* _cpRes) {
+			int idx = threadIdx.x + blockIdx.x * blockDim.x;
+			if (idx >= travPrimSize) return;
+			const BOX bv = _box[_lvs_idx[idx]];
+
+			int stack[32];			// This is dynamically sized through templating
+			int* stackPtr = stack;
+			*(stackPtr++) = 0;					// Push
+			while (stackPtr != stack) {
+
+				uint32_t nodeIdx = *(--stackPtr);	// Pop
+				bool isLeaf = nodeIdx & 0x80000000;
+				nodeIdx = nodeIdx & 0x7FFFFFFF;
+
+				if (isLeaf) {
+					int temp_idx = _lvs_idx[nodeIdx];
+					if (SELF)
+						if (temp_idx >= idx) continue;
+					_cpRes[atomicAdd(_cpNum, 1)] = make_int2(nodeIdx, idx);
+					continue;
+				}
+
+				auto node = _nodes[nodeIdx];
+
+				if (bv.overlaps(node.bounds[0])) {
+					*(stackPtr++) = node.lc;
+				}
+
+				if (bv.overlaps(node.bounds[1])) {
+					*(stackPtr++) = node.rc;
 				}
 
 			}
@@ -640,8 +857,140 @@ namespace CXE {
 			//}
 		}
 
-	}
+	
 
+		// Uses CUDA intrinsics for counting leading zeros
+		__device__ inline int commonUpperBits(const uint64_t lhs, const uint64_t rhs) {
+			return ::__clzll(lhs ^ rhs);
+		}
+
+		// Merges morton code with its index to output a sorted unique 64-bit key.
+		__device__ inline uint64_t mergeIdx(const uint code, const int idx) {
+			return ((uint64_t)code << 32ul) | (uint64_t)idx;
+		}
+
+		__device__ inline vec2i determineRange(uint const* mortonCodes,
+			const uint numObjs, uint idx) {
+
+			// This is the root node
+			if (idx == 0)
+				return vec2i(0, numObjs - 1);
+
+			// Determine direction of the range
+			const uint64_t selfCode = mergeIdx(mortonCodes[idx], idx);
+			const int lDelta = commonUpperBits(selfCode, mergeIdx(mortonCodes[idx - 1], idx - 1));
+			const int rDelta = commonUpperBits(selfCode, mergeIdx(mortonCodes[idx + 1], idx + 1));
+			const int d = (rDelta > lDelta) ? 1 : -1;
+
+			// Compute upper bound for the length of the range
+			const int minDelta = thrust::min(lDelta, rDelta);
+			int lMax = 2;
+			int i;
+			while ((i = idx + d * lMax) >= 0 && i < numObjs) {
+				if (commonUpperBits(selfCode, mergeIdx(mortonCodes[i], i)) <= minDelta) break;
+				lMax <<= 1;
+			}
+
+			// Find the exact range by binary search
+			int t = lMax >> 1;
+			int l = 0;
+			while (t > 0) {
+				i = idx + (l + t) * d;
+				if (0 <= i && i < numObjs)
+					if (commonUpperBits(selfCode, mergeIdx(mortonCodes[i], i)) > minDelta)
+						l += t;
+				t >>= 1;
+			}
+
+			unsigned int jdx = idx + l * d;
+			if (d < 0) thrust::swap(idx, jdx); // Make sure that idx < jdx
+			return vec2i(idx, jdx);
+		}
+
+		__device__ inline uint findSplit(uint const* mortonCodes,
+			const uint first, const uint last) {
+
+			const uint64_t firstCode = mergeIdx(mortonCodes[first], first);
+			const uint64_t lastCode = mergeIdx(mortonCodes[last], last);
+			const int deltaNode = commonUpperBits(firstCode, lastCode);
+
+			// Binary search for split position
+			int split = first;
+			int stride = last - first;
+			do {
+				stride = (stride + 1) >> 1;
+				const int middle = split + stride;
+				if (middle < last)
+					if (commonUpperBits(firstCode, mergeIdx(mortonCodes[middle], middle)) > deltaNode)
+						split = middle;
+			} while (stride > 1);
+
+			return split;
+		}
+
+		// Builds out the internal nodes of the LBVH
+		__global__ void lbvhBuildInternalKernel(bvhNode* nodes,
+			uint* leafParents, uint const* mortonCodes, int const* objIDs, int numObjs) {
+
+			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
+			if (tid >= numObjs - 1) return;
+
+			vec2i range = determineRange(mortonCodes, numObjs, tid);
+			//nodes[tid].fence = (tid == range.x) ? range.y : range.x;
+
+			const int gamma = findSplit(mortonCodes, range.x, range.y);
+
+			// Left and right children are neighbors to the split point
+			// Check if there are leaf nodes, which are indexed behind the (numObj - 1) internal nodes
+			if (range.x == gamma) {
+				leafParents[gamma] = (uint32_t)tid;
+				range.x = gamma | 0x80000000;
+			}
+			else {
+				range.x = gamma;
+				nodes[range.x].par = (uint32_t)tid;
+			}
+
+			if (range.y == gamma + 1) {
+				leafParents[gamma + 1] = (uint32_t)tid | 0x80000000;
+				range.y = (gamma + 1) | 0x80000000;
+			}
+			else {
+				range.y = gamma + 1;
+				nodes[range.y].par = (uint32_t)tid | 0x80000000;
+			}
+
+			nodes[tid].lc = range.x;
+			nodes[tid].rc = range.y;
+		}
+
+		// Refits the AABBs of the internal nodes
+		__global__ void mergeNodeRefit(bvhNode* nodes,
+			uint* leafParents, AABB* aabbs, int* objIDs, int* flags, int size) {
+		
+			const int tid = threadIdx.x + blockIdx.x * blockDim.x;
+			if (tid >= size) return;
+
+			AABB last = aabbs[tid];
+			uint parent = leafParents[tid];
+			while (true) {
+				int isRight = (parent & 0x80000000) != 0;
+				parent = parent & 0x7FFFFFFF;
+				nodes[parent].bounds[isRight] = last;
+
+				// Exit if we are the first thread here
+				int flag = atomicAdd(flags + parent, 1);
+				if (!flag) return;
+
+				// Ensure memory coherency before we read.
+				__threadfence();
+
+				if (parent == 0) break;
+				last.combines(nodes[parent].bounds[1 - isRight]);
+				parent = nodes[parent].par;
+			}
+		}
+	}
 }
 
 

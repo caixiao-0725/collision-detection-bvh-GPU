@@ -1,0 +1,2 @@
+add_subdirectory(randPoints)
+add_subdirectory(simulationData)
