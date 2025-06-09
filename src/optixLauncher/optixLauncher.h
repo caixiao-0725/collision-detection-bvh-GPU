@@ -5,6 +5,8 @@
 #include "stdint.h"
 #include <cuda_runtime.h>
 #include "edgeTriangles.h"
+#include "origin.h"
+#include "bv.h"
 
 typedef unsigned int uint;
 #define OPTIX_CHECK(call)                                                 \
@@ -48,7 +50,7 @@ typedef unsigned int uint;
 		}                                                                         \
 	} while (0)
 
-struct OptixLauncherInfo {
+struct OptixTriangleLauncherInfo {
 	uint32_t buildInputFlags = OPTIX_GEOMETRY_FLAG_NONE;
 	OptixBuildInput triangleInput = {};
 	//OptixBuildInput iasBuildInput = {};
@@ -63,6 +65,22 @@ struct OptixLauncherInfo {
 	size_t tempBufferSize = 0;
 };
 
+struct OptixAABBLauncherInfo {
+	uint32_t buildInputFlags = OPTIX_GEOMETRY_FLAG_NONE;
+	OptixBuildInput AABBInput = {};
+	//OptixBuildInput iasBuildInput = {};
+	CUdeviceptr AABBBuffer = 0;
+	CUdeviceptr numAABB = 0;
+
+	CUdeviceptr tempBuffer = 0;
+	CUdeviceptr gasOutputBuffer = 0;
+
+	size_t gasOutputBufferSize = 0;
+	size_t tempBufferSize = 0;
+};
+
+
+
 class OptixLauncher
 {
 public:
@@ -72,11 +90,15 @@ public:
 
 	void init();
 	void createContext();
-	void createModule();
+	void createTriangleModule();
+	void createAABBModule();
 
 	OptixProgramGroup createRaygenProgramGroup();
 	OptixProgramGroup createMissProgramGroup();
-	OptixProgramGroup createHitgroupProgramGroup(bool useAnyhit,const char* entryName);
+
+	OptixProgramGroup createHitgroupProgramGroup(bool useAnyhit, const char* entryName);
+
+	OptixProgramGroup createAABBHitgroupProgramGroup(bool useAnyhit,const char* anyhitName,const char* intersectName);
 
 	OptixPipeline linkPipeline(OptixProgramGroup hitgroupProgGroup);
 	void setupShaderBindingTable(OptixShaderBindingTable& sbt, float radius, OptixProgramGroup hitgroupProgGroup);
@@ -94,7 +116,8 @@ public:
 	OptixShaderBindingTable m_obstacleSbt;
 	OptixShaderBindingTable m_clothSbt;
 
-	OptixLauncherInfo m_obstacleLauncherInfo;
+	OptixTriangleLauncherInfo m_obstacleTriangleLauncherInfo;
+	OptixAABBLauncherInfo m_obstacleAABBLauncherInfo;
 
 	OptixTraversableHandle m_obstacleGASHandle;
 	OptixTraversableHandle m_obstacleIASHandle;
@@ -104,7 +127,7 @@ public:
 	Params m_cpuParams;
 	CUdeviceptr m_gpuParams;
 
-	void buildObstacle(const void* verts,
+	void buildTriangleObstacle(const void* verts,
 		unsigned int strideInBytes,
 		unsigned int posOffsetInBytes,
 		unsigned int vertCnt,
@@ -112,7 +135,7 @@ public:
 		unsigned int indexCnt,
 		float transform[3][4]);
 
-	void buildGeometry(OptixLauncherInfo& info,
+	void buildTriangleGeometry(OptixTriangleLauncherInfo& info,
 		OptixTraversableHandle& gasHandle,
 		OptixTraversableHandle& iasHandle,
 		const void* verts,
@@ -123,11 +146,32 @@ public:
 		uint32_t indexCnt,
 		float transform[3][4]);
 
-	void buildGeometryWithGPUData(OptixLauncherInfo& info,
+	void buildTriangleGeometryWithGPUData(OptixTriangleLauncherInfo& info,
 		OptixTraversableHandle& gasHandle,
 		OptixTraversableHandle& iasHandle,
 		uint32_t vertCnt,
 		uint32_t indexCnt,
+		float transform[3][4]);
+
+	void buildAABBObstacle(const vec3f* verts,
+		const vec3i* index,
+		unsigned int faceCnt,
+		const float thickness,
+		float transform[3][4]);
+
+	void buildAABBGeometry(OptixAABBLauncherInfo& info,
+		OptixTraversableHandle& gasHandle,
+		OptixTraversableHandle& iasHandle,
+		const vec3f* gpuVertexBuffer,
+		const vec3i* gpuIndexBuffer,
+		uint32_t faceCnt,
+		const float thickness,
+		float transform[3][4]);
+
+	void buildAABBGeometryWithGPUData(OptixAABBLauncherInfo& info,
+		OptixTraversableHandle& gasHandle,
+		OptixTraversableHandle& iasHandle,
+		uint32_t aabbCnt,
 		float transform[3][4]);
 
 	void launchForEdge(void* gpuVerts, void* edges, const uint numEdges);
@@ -137,11 +181,15 @@ public:
 	float m_particleSphereRadius = 0.001f;
 
 	HitResult* m_gpuHitResults;
+
+	int m_type = 0; // 0.  aabb primitive   1. triangle primitive 
 };
 
 
 
 void setVertexBuffer(float3* gpuVertexBuffer, const void* verts, uint strideInBytes, uint posOffsetInBytes, uint numVertices);
+
+void setAABBBuffer(AABB* AABBBuffer, const vec3f* verts, const vec3i* indexs, const float thickness, uint numAABB);
 
 
 #endif

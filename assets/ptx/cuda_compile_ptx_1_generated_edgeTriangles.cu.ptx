@@ -17,7 +17,36 @@
 	.param .b64 vprintf_param_1
 )
 ;
-.const .align 8 .b8 params[32];
+.const .align 8 .b8 params[48];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo5beginE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo3endE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo6cbeginE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo4cendE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo6rbeginE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo4rendE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo7crbeginE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__45__cpo5crendE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__449_GLOBAL__N__dad48480_16_edgeTriangles_cu_8dab212d6ignoreE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__419piecewise_constructE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__48in_placeE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std3__47nulloptE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d4cuda3std6ranges3__45__cpo4swapE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS8cuda_cub3parE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS8cuda_cub10par_nosyncE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS6system6detail10sequential3seqE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS6system3cpp3parE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_1E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_2E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_3E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_4E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_5E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_6E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_7E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_8E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders2_9E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders3_10E[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS3seqE[1];
+.global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS6deviceE[1];
 .global .align 1 .b8 $str[9] = {37, 100, 32, 32, 32, 37, 100, 10};
 
 .visible .entry __miss__ms()
@@ -69,8 +98,8 @@
 	fma.rn.f32 	%f14, %f4, %f4, %f13;
 	fma.rn.f32 	%f15, %f6, %f6, %f14;
 	sqrt.rn.f32 	%f8, %f15;
-	ld.const.u64 	%rd1, [params+24];
-	ld.const.u64 	%rd12, [params+16];
+	ld.const.u64 	%rd1, [params+40];
+	ld.const.u64 	%rd12, [params+32];
 	cvta.to.global.u64 	%rd13, %rd12;
 	mov.f32 	%f9, 0f00000000;
 	mov.u32 	%r40, 255;
@@ -98,19 +127,12 @@
 	cvta.local.u64 	%SP, %SPL;
 	add.u64 	%rd1, %SP, 0;
 	add.u64 	%rd2, %SPL, 0;
+	mov.u32 	%r7, 0;
 	// begin inline asm
 	call (%r1), _optix_get_launch_index_x, ();
 	// end inline asm
 	// begin inline asm
-	call (%r2), _optix_get_launch_index_y, ();
-	// end inline asm
-	// begin inline asm
-	call (%r5), _optix_get_launch_dimension_y, ();
-	// end inline asm
-	mov.u32 	%r7, 0;
-	mad.lo.s32 	%r8, %r5, %r1, %r2;
-	// begin inline asm
-	call _optix_set_payload, (%r7, %r8);
+	call _optix_set_payload, (%r7, %r1);
 	// end inline asm
 	mov.u32 	%r10, 1;
 	// begin inline asm
@@ -119,7 +141,7 @@
 	// begin inline asm
 	call _optix_set_payload, (%r10, %r9);
 	// end inline asm
-	st.local.v2.u32 	[%rd2], {%r8, %r9};
+	st.local.v2.u32 	[%rd2], {%r1, %r9};
 	mov.u64 	%rd3, $str;
 	cvta.global.u64 	%rd4, %rd3;
 	{ // callseq 0, 0
@@ -157,19 +179,12 @@
 	cvta.local.u64 	%SP, %SPL;
 	add.u64 	%rd1, %SP, 0;
 	add.u64 	%rd2, %SPL, 0;
+	mov.u32 	%r7, 0;
 	// begin inline asm
 	call (%r1), _optix_get_launch_index_x, ();
 	// end inline asm
 	// begin inline asm
-	call (%r2), _optix_get_launch_index_y, ();
-	// end inline asm
-	// begin inline asm
-	call (%r5), _optix_get_launch_dimension_y, ();
-	// end inline asm
-	mov.u32 	%r7, 0;
-	mad.lo.s32 	%r8, %r5, %r1, %r2;
-	// begin inline asm
-	call _optix_set_payload, (%r7, %r8);
+	call _optix_set_payload, (%r7, %r1);
 	// end inline asm
 	mov.u32 	%r10, 1;
 	// begin inline asm
@@ -178,7 +193,7 @@
 	// begin inline asm
 	call _optix_set_payload, (%r10, %r9);
 	// end inline asm
-	st.local.v2.u32 	[%rd2], {%r8, %r9};
+	st.local.v2.u32 	[%rd2], {%r1, %r9};
 	mov.u64 	%rd3, $str;
 	cvta.global.u64 	%rd4, %rd3;
 	{ // callseq 1, 0
@@ -196,6 +211,30 @@
 	);
 	ld.param.b32 	%r12, [retval0+0];
 	} // callseq 1
+	ret;
+
+}
+	// .globl	__intersection__is
+.visible .entry __intersection__is()
+{
+	.reg .f32 	%f<8>;
+	.reg .b32 	%r<7>;
+
+
+	mov.f32 	%f7, 0f00000000;
+	mov.u32 	%r6, 0;
+	// begin inline asm
+	call (%r2), _optix_report_intersection_3, (%f7, %r6, %r6, %r6, %r6);
+	// end inline asm
+	ret;
+
+}
+	// .globl	_ZN3cub17CUB_200700_520_NS11EmptyKernelIvEEvv
+.visible .entry _ZN3cub17CUB_200700_520_NS11EmptyKernelIvEEvv()
+{
+
+
+
 	ret;
 
 }

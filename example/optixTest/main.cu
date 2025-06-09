@@ -16,7 +16,7 @@ using namespace CXE;
 class Mesh {
 public:
 	DeviceHostVector<vec3f> points;
-	DeviceHostVector<vec3u> faces;
+	DeviceHostVector<vec3i> faces;
 
 	void readObj(const char* filename) {
         std::ifstream in;
@@ -39,7 +39,7 @@ public:
             }
             else if (!line.compare(0, 2, "f "))
             { // 如果这一行的前两个字符是“f ”的话，代表是面片数据
-                vec3u v;
+                vec3i v;
                 int iuv, idx; // idx是顶点索引，itrash用来读我们暂时用不到的纹理坐标和法线向量
                 iss >> trash;
                 int i = 0;
@@ -74,8 +74,8 @@ int main() {
     edges_points.Allocate(2);
     edges_indexs.Allocate(1);
 
-    edges_points.GetHost()[0] = vec3f(-0.01, 1, 0);
-	edges_points.GetHost()[1] = vec3f(-0.01, -1, 0);
+    edges_points.GetHost()[0] = vec3f(0, 1, 0);
+	edges_points.GetHost()[1] = vec3f(0, -1, 0);
 
 	edges_indexs.GetHost()[0] = vec2i(1, 0);
 
@@ -96,8 +96,10 @@ int main() {
     uint32_t vertexCount = m_obstacle.points.GetSize();
     uint32_t indexCount = m_obstacle.faces.GetSize()*3;
     float transform[3][4];
-    temp.buildObstacle((void*)m_obstacle.points.GetDevice(), vertexStride, posOffset, vertexCount,
-        (void*)m_obstacle.faces.GetDevice(), indexCount, transform);
+
+    temp.buildAABBObstacle(m_obstacle.points.GetDevice(), m_obstacle.faces.GetDevice(), m_obstacle.faces.GetSize(),0.001f, transform);
+    //temp.buildTriangleObstacle((void*)m_obstacle.points.GetDevice(), vertexStride, posOffset, vertexCount,
+    //    (void*)m_obstacle.faces.GetDevice(), indexCount, transform);
 
     temp.launchForEdge((void*)edges_points.GetDevice(), (void*)edges_indexs.GetDevice(), edges_indexs.GetSize());
 

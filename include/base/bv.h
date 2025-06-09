@@ -46,6 +46,12 @@ public:
             v.y <= _max.y && v.y >= _min.y &&
             v.z <= _max.z && v.z >= _min.z;
     }
+
+    __host__ __device__ void enlarges(const float& thickness) {
+		_min.x -= thickness; _min.y -= thickness; _min.z -= thickness;
+		_max.x += thickness; _max.y += thickness; _max.z += thickness;
+    }
+
     __host__ __device__ float merges(const AABB &a, const AABB &b, float *qualityMetric) {
         _min = vec3f(::fmin(a._min.x, b._min.x), ::fmin(a._min.y, b._min.y), ::fmin(a._min.z, b._min.z));
         _max = vec3f(::fmax(a._max.x, b._max.x), ::fmax(a._max.y, b._max.y), ::fmax(a._max.z, b._max.z));

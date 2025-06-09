@@ -19,6 +19,24 @@ extern "C" __global__ void __miss__ms()
 	optixSetPayload_4(0);  // hit
 }
 
+static __forceinline__ __device__ vec3f optixGetObjectRayO()
+{
+	float f0, f1, f2;
+	asm("call (%0), _optix_get_object_ray_origin_x, ();" : "=f"(f0) : );
+	asm("call (%0), _optix_get_object_ray_origin_y, ();" : "=f"(f1) : );
+	asm("call (%0), _optix_get_object_ray_origin_z, ();" : "=f"(f2) : );
+	return vec3f(f0, f1, f2);
+}
+
+static __forceinline__ __device__ vec3f optixGetObjectRayD()
+{
+	float f0, f1, f2;
+	asm("call (%0), _optix_get_object_ray_direction_x, ();" : "=f"(f0) : );
+	asm("call (%0), _optix_get_object_ray_direction_y, ();" : "=f"(f1) : );
+	asm("call (%0), _optix_get_object_ray_direction_z, ();" : "=f"(f2) : );
+	return vec3f(f0, f1, f2);
+}
+
 static __forceinline__ __device__ void trace_sphere(OptixTraversableHandle handle,
 	float3 ray_origin,
 	float3 ray_direction,
@@ -69,7 +87,7 @@ extern "C" __global__ void __anyhit__ch()
 {
 	uint3 idx = optixGetLaunchIndex();  // ray's index
 	const uint3 dim = optixGetLaunchDimensions();
-	unsigned int ray_idx = idx.x * dim.y + idx.y;
+	unsigned int ray_idx = idx.x;
 	optixSetPayload_0(ray_idx);
 
 	const unsigned int prim_idx = optixGetPrimitiveIndex();
@@ -85,12 +103,38 @@ extern "C" __global__ void __closesthit__ch()
 {
 	uint3 idx = optixGetLaunchIndex();  // ray's index
 	const uint3 dim = optixGetLaunchDimensions();
-	unsigned int ray_idx = idx.x * dim.y + idx.y;
+	unsigned int ray_idx = idx.x;
 	optixSetPayload_0(ray_idx);
 
 	const unsigned int prim_idx = optixGetPrimitiveIndex();
 	optixSetPayload_1(prim_idx);
 
 	printf("%d   %d\n", ray_idx, prim_idx);
+
+}
+
+
+extern "C" __global__ void __intersection__is()
+{
+	const vec3f e0 = optixGetObjectRayO();
+	const vec3f e1 = optixGetObjectRayD() + e0;
+
+	const unsigned int prim_idx = optixGetPrimitiveIndex();
+
+	vec3i face = params.indexBuffer[prim_idx];
+	vec3f v0 = params.vertexBuffer[face.x];
+	vec3f v1 = params.vertexBuffer[face.y];
+	vec3f v2 = params.vertexBuffer[face.z];
+
+	optixReportIntersection(
+		0.0f,  // t
+		0,     // rayFlags
+		0u,  // barycentrics
+		0u,  // primitive index
+		0u   // geometry index
+	);
+
+	//printf("%d   %d\n", ray_idx, prim_idx);
+
 
 }

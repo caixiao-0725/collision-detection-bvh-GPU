@@ -14,6 +14,7 @@
 #include "edgeTriangles.h"
 #include "common.h"
 
+
 template <typename T>
 struct SbtRecord
 {
@@ -134,7 +135,7 @@ void OptixLauncher::createContext()
 	OPTIX_CHECK(optixDeviceContextCreate(cuCtx, &options, &m_context));
 }
 
-void OptixLauncher::createModule() {
+void OptixLauncher::createTriangleModule() {
 	m_pipeline_compile_options = {};
 
 	OptixModuleCompileOptions module_compile_options = {};
@@ -177,6 +178,49 @@ void OptixLauncher::createModule() {
 		&m_builtinSphereModule));
 }
 
+void OptixLauncher::createAABBModule() {
+	m_pipeline_compile_options = {};
+
+	OptixModuleCompileOptions module_compile_options = {};
+	module_compile_options.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
+	module_compile_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
+	module_compile_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
+
+	m_pipeline_compile_options.usesMotionBlur = false;
+	m_pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;//OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
+	m_pipeline_compile_options.numPayloadValues = 5; //NUM_PAYLOAD_VALUES;
+	m_pipeline_compile_options.numAttributeValues = 3; //NUM_ATTRIBUTE_VALUES;
+	m_pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;  // TODO: should be OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
+	m_pipeline_compile_options.pipelineLaunchParamsVariableName = "params";
+	m_pipeline_compile_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
+
+	size_t sizeof_log = sizeof(log);
+
+	size_t optixPtxSize = 0;
+	std::string fullPath = get_asset_path() + "ptx/cuda_compile_ptx_1_generated_edgeTriangles.cu.ptx";
+	std::cout << "PTX: " << fullPath << std::endl;
+	const char* optixPtx = getInputData(fullPath.c_str(), optixPtxSize);
+
+	OPTIX_CHECK_LOG(optixModuleCreate(m_context,
+		&module_compile_options,
+		&m_pipeline_compile_options,
+		optixPtx,
+		optixPtxSize,
+		log,
+		&sizeof_log,
+		&m_module));
+
+	//OptixBuiltinISOptions builtinISOptions = {};
+	//builtinISOptions.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_CUSTOM;
+	//builtinISOptions.usesMotionBlur = 0;
+	//builtinISOptions.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
+	//OPTIX_CHECK(optixBuiltinISModuleGet(m_context,
+	//	&module_compile_options,
+	//	&m_pipeline_compile_options,
+	//	&builtinISOptions,
+	//	&m_builtinSphereModule));
+}
+
 void OptixLauncher::init()
 {
 	// Initialize CUDA
@@ -184,12 +228,17 @@ void OptixLauncher::init()
 	CUDA_CHECK(cudaStreamCreate(&m_stream));
 	
 	createContext();
-	createModule();
+	if (m_type == 0) // AABB primitive
+		createAABBModule();
+	else // triangle primitive
+		createTriangleModule();
 
 	m_raygenProgGroup = createRaygenProgramGroup();
 	m_missProgGroup = createMissProgramGroup();
-
-	m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(true,"__anyhit__ch");
+	if (m_type == 0) // AABB primitive
+		m_obstacleHitgroupProgGroup = createAABBHitgroupProgramGroup(true, "__anyhit__ch", "__intersection__is");
+	else // triangle primitive
+		m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(true,"__anyhit__ch");
 	//m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(false, "__closesthit__ch");
 	m_obstaclePipeline = linkPipeline(m_obstacleHitgroupProgGroup);
 
@@ -216,7 +265,7 @@ OptixProgramGroup OptixLauncher::createHitgroupProgramGroup(bool useAnyhit, cons
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = entryName;
 		hitgroup_prog_group_desc.hitgroup.moduleCH = nullptr;
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = nullptr;
-		hitgroup_prog_group_desc.hitgroup.moduleIS = m_builtinSphereModule;
+		hitgroup_prog_group_desc.hitgroup.moduleIS = nullptr;
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = nullptr;
 		sizeof_log = sizeof(log);
 		OPTIX_CHECK_LOG(optixProgramGroupCreate(m_context,
@@ -235,8 +284,58 @@ OptixProgramGroup OptixLauncher::createHitgroupProgramGroup(bool useAnyhit, cons
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = nullptr;
 		hitgroup_prog_group_desc.hitgroup.moduleCH = m_module;
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = entryName;
-		hitgroup_prog_group_desc.hitgroup.moduleIS = m_builtinSphereModule;
+		hitgroup_prog_group_desc.hitgroup.moduleIS = nullptr;
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = nullptr;
+		sizeof_log = sizeof(log);
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(m_context,
+			&hitgroup_prog_group_desc,
+			1,  // num program groups
+			&program_group_options,
+			log,
+			&sizeof_log,
+			&hitgroup_prog_group));
+	}
+
+	return hitgroup_prog_group;
+}
+
+OptixProgramGroup OptixLauncher::createAABBHitgroupProgramGroup(bool useAnyhit, const char* anyhitName, const char* intersectName)
+{
+	OptixProgramGroupOptions program_group_options = {};  // Initialize to zeros
+
+	size_t sizeof_log = sizeof(log);
+
+	OptixProgramGroup hitgroup_prog_group;
+
+	if (useAnyhit)
+	{
+		OptixProgramGroupDesc hitgroup_prog_group_desc = {};
+		hitgroup_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+		hitgroup_prog_group_desc.hitgroup.moduleAH = m_module;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = anyhitName;
+		hitgroup_prog_group_desc.hitgroup.moduleCH = nullptr;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = nullptr;
+		hitgroup_prog_group_desc.hitgroup.moduleIS = m_module;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = intersectName;
+		sizeof_log = sizeof(log);
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(m_context,
+			&hitgroup_prog_group_desc,
+			1,  // num program groups
+			&program_group_options,
+			log,
+			&sizeof_log,
+			&hitgroup_prog_group));
+	}
+	else
+	{
+		OptixProgramGroupDesc hitgroup_prog_group_desc = {};
+		hitgroup_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+		hitgroup_prog_group_desc.hitgroup.moduleAH = nullptr;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = nullptr;
+		hitgroup_prog_group_desc.hitgroup.moduleCH = m_module;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = anyhitName;
+		hitgroup_prog_group_desc.hitgroup.moduleIS = m_module;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = intersectName;
 		sizeof_log = sizeof(log);
 		OPTIX_CHECK_LOG(optixProgramGroupCreate(m_context,
 			&hitgroup_prog_group_desc,
@@ -298,7 +397,7 @@ OptixProgramGroup OptixLauncher::createMissProgramGroup()
 	return miss_prog_group;
 }
 
-void OptixLauncher::buildObstacle(const void* verts,
+void OptixLauncher::buildTriangleObstacle(const void* verts,
 	uint32_t strideInBytes,
 	uint32_t posOffsetInBytes,
 	uint32_t vertCnt,
@@ -306,7 +405,7 @@ void OptixLauncher::buildObstacle(const void* verts,
 	uint32_t indexCnt,
 	float transform[3][4])
 {
-	buildGeometry(m_obstacleLauncherInfo,
+	buildTriangleGeometry(m_obstacleTriangleLauncherInfo,
 		m_obstacleGASHandle,
 		m_obstacleIASHandle,
 		verts,
@@ -319,7 +418,7 @@ void OptixLauncher::buildObstacle(const void* verts,
 }
 
 
-void OptixLauncher::buildGeometry(OptixLauncherInfo& info,
+void OptixLauncher::buildTriangleGeometry(OptixTriangleLauncherInfo& info,
 	OptixTraversableHandle& gasHandle,
 	OptixTraversableHandle& iasHandle,
 	const void* gpuVertexBuffer,
@@ -343,10 +442,10 @@ void OptixLauncher::buildGeometry(OptixLauncherInfo& info,
 	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.indexBuffer), indicesSizeInBytes));
 	CUDA_CHECK(cudaMemcpy((void*)info.indexBuffer, gpuIndexBuffer, indicesSizeInBytes, cudaMemcpyDeviceToDevice));
 
-	buildGeometryWithGPUData(info, gasHandle, iasHandle, vertCnt, indexCnt, transform);
+	buildTriangleGeometryWithGPUData(info, gasHandle, iasHandle, vertCnt, indexCnt, transform);
 }
 
-void OptixLauncher::buildGeometryWithGPUData(OptixLauncherInfo& info,
+void OptixLauncher::buildTriangleGeometryWithGPUData(OptixTriangleLauncherInfo& info,
 	OptixTraversableHandle& gasHandle,
 	OptixTraversableHandle& iasHandle,
 	uint32_t vertCnt,
@@ -390,6 +489,117 @@ void OptixLauncher::buildGeometryWithGPUData(OptixLauncherInfo& info,
 		0,  // CUDA stream
 		&accel_options,
 		&info.triangleInput,
+		1,  // num build inputs
+		info.tempBuffer,
+		gasBufferSizes.tempSizeInBytes,
+		gpuTempOutputBufferAndCompactedSize, // output buffer
+		gasBufferSizes.outputSizeInBytes,
+		&gasHandle,
+		&emitProperty,  // emitted property list
+		1));            // num emitted properties
+
+	size_t compacted_gas_size;
+	CUDA_CHECK(cudaMemcpy(&compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost));
+
+	if (compacted_gas_size < gasBufferSizes.outputSizeInBytes)
+	{
+		//m_gpuOutputBuffer.resizeBySizeInBytes(compacted_gas_size);
+		CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.gasOutputBuffer), compacted_gas_size));
+		// use handle as input and output
+		OPTIX_CHECK(optixAccelCompact(m_context,
+			0,
+			gasHandle,
+			info.gasOutputBuffer,
+			compacted_gas_size,
+			&gasHandle));
+		CUDA_CHECK(cudaFree((void*)gpuTempOutputBufferAndCompactedSize)); // free temp output
+		info.gasOutputBufferSize = compacted_gas_size;
+	}
+	else
+	{
+		info.gasOutputBuffer = gpuTempOutputBufferAndCompactedSize;
+		info.gasOutputBufferSize = gasBufferSizes.outputSizeInBytes;
+	}
+}
+
+
+
+void OptixLauncher::buildAABBObstacle(const vec3f* verts,
+	const vec3i* index,
+	uint32_t indexCnt,
+	const float thickness,
+	float transform[3][4])
+{
+	buildAABBGeometry(m_obstacleAABBLauncherInfo,
+		m_obstacleGASHandle,
+		m_obstacleIASHandle,
+		verts,
+		index,
+		indexCnt,
+		thickness,
+		transform);
+}
+
+
+void OptixLauncher::buildAABBGeometry(OptixAABBLauncherInfo& info,
+	OptixTraversableHandle& gasHandle,
+	OptixTraversableHandle& iasHandle,
+	const vec3f* gpuVertexBuffer,
+	const vec3i* gpuIndexBuffer,
+	uint32_t faceCnt,
+	const float thickness,
+	float transform[3][4])
+{
+	info.numAABB = faceCnt; // each triangle has one AABB
+	const size_t AABBSizeInBytes = info.numAABB * sizeof(AABB);
+	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.AABBBuffer), AABBSizeInBytes));
+
+	setAABBBuffer((AABB*)info.AABBBuffer,
+		gpuVertexBuffer,
+		gpuIndexBuffer,
+		thickness,
+		faceCnt);
+
+	buildAABBGeometryWithGPUData(info, gasHandle, iasHandle, faceCnt, transform);
+}
+
+void OptixLauncher::buildAABBGeometryWithGPUData(OptixAABBLauncherInfo& info,
+	OptixTraversableHandle& gasHandle,
+	OptixTraversableHandle& iasHandle,
+	uint32_t aabbCnt,
+	float transform[3][4])
+{
+	info.buildInputFlags = OPTIX_GEOMETRY_FLAG_NONE;
+	info.AABBInput.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+	info.AABBInput.customPrimitiveArray.aabbBuffers = &info.AABBBuffer; // todo
+	info.AABBInput.customPrimitiveArray.numPrimitives = aabbCnt;
+	info.AABBInput.customPrimitiveArray.flags = &info.buildInputFlags;
+	info.AABBInput.customPrimitiveArray.numSbtRecords = 1; // hit
+
+	// build GAS
+	OptixAccelBuildOptions accel_options = {};
+	accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION | OPTIX_BUILD_FLAG_ALLOW_UPDATE ;
+	accel_options.motionOptions.numKeys = 1;
+	accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
+
+	OptixAccelBufferSizes gasBufferSizes;
+	OPTIX_CHECK(optixAccelComputeMemoryUsage(m_context, &accel_options, &info.AABBInput, 1, &gasBufferSizes));
+	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.tempBuffer), gasBufferSizes.tempSizeInBytes));
+	info.tempBufferSize = gasBufferSizes.tempSizeInBytes;
+
+	// non-compacted output
+	size_t compactedSizeOffset = roundUp<size_t>(gasBufferSizes.outputSizeInBytes, 8ull);
+	CUdeviceptr gpuTempOutputBufferAndCompactedSize;
+	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&gpuTempOutputBufferAndCompactedSize), compactedSizeOffset + 8));
+
+	OptixAccelEmitDesc emitProperty = {};
+	emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
+	emitProperty.result = (CUdeviceptr)((char*)gpuTempOutputBufferAndCompactedSize + compactedSizeOffset);
+
+	OPTIX_CHECK(optixAccelBuild(m_context,
+		0,  // CUDA stream
+		&accel_options,
+		&info.AABBInput,
 		1,  // num build inputs
 		info.tempBuffer,
 		gasBufferSizes.tempSizeInBytes,
