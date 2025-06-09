@@ -36,3 +36,6 @@ https://github.com/jerry060599/KittenGpuLBVH
 
 7. stackless query 创建了32bytes的结构体，在遍历的时候可以合并访问
 
+### optix collision detection
+
+使用optix去做碰撞检测，基础单元使用三角形的话有诸多问题，弃用，但是可以参考我的某一次commit，它无法处理光线穿过两个三角形的公共边，并且无法处理有厚度的情况。采用光线和aabb包围盒，自己做mid phase。

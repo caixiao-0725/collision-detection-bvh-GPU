@@ -1,2 +1,3 @@
 add_subdirectory(randPoints)
 add_subdirectory(simulationData)
+add_subdirectory(optixTest)

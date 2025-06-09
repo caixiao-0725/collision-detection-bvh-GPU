@@ -1,2 +1,3 @@
 add_subdirectory(common)
 add_subdirectory(LBVH)
+add_subdirectory(optixLauncher)

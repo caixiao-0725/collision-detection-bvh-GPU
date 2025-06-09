@@ -68,6 +68,7 @@ namespace CXE
 
     template class DeviceHostVector<vec4f>;
     template class DeviceHostVector<vec3f>;
+    template class DeviceHostVector<vec3u>;
     template class DeviceHostVector<vec2f>;
     template class DeviceHostVector<vec3i>;
     template class DeviceHostVector<vec2i>;

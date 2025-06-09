@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <string>
 #include <iomanip>
+#include "common.h"
 
 // Platform-specific filesystem includes
 #ifdef __has_include
@@ -31,11 +32,6 @@ namespace fs = std::filesystem;
 #endif
 
 using namespace CXE;
-
-inline std::string get_asset_path()
-{
-    return std::string{ ASSET_PATH } + "/";
-}
 
 
 std::vector<BOX> load_aabb_file(const std::string& filepath) {

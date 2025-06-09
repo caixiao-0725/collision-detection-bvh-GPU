@@ -121,6 +121,7 @@ __host__ __device__ inline vec3<T> cross(vec3<T>& a, vec3<T>& b) {return vec3<T>
 // �������
 typedef vec3<int> vec3i;
 typedef vec3<float> vec3f;
+typedef vec3<unsigned int> vec3u;
 
 __host__ __device__ inline vec3f normalize(vec3f v) { return v / v.Length(); }
 __host__ __device__ inline float dot(vec3f v, vec3f u) { return u.dot(v); }
