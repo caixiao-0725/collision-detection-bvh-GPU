@@ -66,7 +66,7 @@ public:
 };
 
 
-int main() {
+int main0() {
     // edge
     DeviceHostVector<vec3f> edges_points;
     DeviceHostVector<vec2i> edges_indexs;
@@ -89,10 +89,9 @@ int main() {
     m_obstacle.readObj(path.c_str());
 
 	OptixLauncher temp;
+    temp.m_type = 1;
 	temp.init();
 
-    uint32_t vertexStride = 3 * sizeof(float);
-    uint32_t posOffset = 0;
     uint32_t vertexCount = m_obstacle.points.GetSize();
     uint32_t indexCount = m_obstacle.faces.GetSize()*3;
     float transform[3][4];
@@ -107,4 +106,31 @@ int main() {
 	cudaMemcpy(result_cpu, temp.m_gpuHitResults, sizeof(HitResult) * 20, cudaMemcpyDeviceToHost);
 
 	return 0;
+}
+
+int main() {
+    const int N = 10;
+    const float R = 0.001f;
+
+    printf("Generating Data...\n");
+    DeviceHostVector<vec3f> points;
+    points.Allocate(N);
+    srand(1);
+    for (size_t i = 0; i < N; i++) {
+        //points.GetHost()[i] = vec3f(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
+        points.GetHost()[i] = vec3f(i*R*1.1, i*R*1.1, i*R*1.1);
+    }
+
+    points.ReadToDevice();
+
+    OptixLauncher temp;
+    temp.init();
+
+    uint32_t pointCount = points.GetSize();
+    float transform[3][4];
+
+    temp.buildAABBObstacleFromPoint(points, pointCount, R*2, transform);
+
+    temp.launchForVert((void*)points.GetDevice(), points.GetSize());
+    return 0;
 }

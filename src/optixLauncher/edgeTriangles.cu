@@ -37,7 +37,7 @@ static __forceinline__ __device__ vec3f optixGetObjectRayD()
 	return vec3f(f0, f1, f2);
 }
 
-static __forceinline__ __device__ void trace_sphere(OptixTraversableHandle handle,
+static __forceinline__ __device__ void trace_edge(OptixTraversableHandle handle,
 	float3 ray_origin,
 	float3 ray_direction,
 	float tmin,
@@ -63,6 +63,24 @@ static __forceinline__ __device__ void trace_sphere(OptixTraversableHandle handl
 	prd->faceIndex = (int)p[1];
 }
 
+static __forceinline__ __device__ void trace_point(OptixTraversableHandle handle,
+	float3 ray_origin,
+	HitResult* prd)
+{
+	optixTrace(handle,
+		ray_origin,
+		float3{1.0,0,0},
+		0.0f,
+		1e-12f,
+		0.0f,  // rayTime
+		OptixVisibilityMask(255),
+		OPTIX_RAY_FLAG_ENFORCE_ANYHIT | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,//OPTIX_RAY_FLAG_NONE,
+		0,  // SBT offset
+		0,  // SBT stride
+		0  // missSBTIndex
+		);
+}
+
 extern "C" __global__ void __raygen__rg_edge()
 {
 	const uint3 idx = optixGetLaunchIndex();
@@ -75,13 +93,28 @@ extern "C" __global__ void __raygen__rg_edge()
 
 	const float3 d = float3{v1.x-v0.x,v1.y-v0.y,v1.z-v0.z};
 	const float length = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
-	trace_sphere(params.handle,
+	trace_edge(params.handle,
 		v0,
 		d,
 		0.00f,           // tmin
 		length        ,  // tmax  //default 1.2
 		&params.hitResults[index]);
 }
+
+extern "C" __global__ void __raygen__rg_point()
+{
+	const uint3 idx = optixGetLaunchIndex();
+	const uint3 dim = optixGetLaunchDimensions();
+
+	unsigned int index = idx.x;
+
+	float3 v0 = params.vertexs[index];
+
+	trace_point(params.handle,
+		v0,
+		&params.hitResults[index]);
+}
+
 
 extern "C" __global__ void __anyhit__ch()
 {
@@ -92,9 +125,8 @@ extern "C" __global__ void __anyhit__ch()
 
 	const unsigned int prim_idx = optixGetPrimitiveIndex();
 	optixSetPayload_1(prim_idx);
-
-	printf("%d   %d\n", ray_idx, prim_idx);
-
+	
+	printf("anyhit\n");
 	optixIgnoreIntersection();
 }
 
@@ -109,23 +141,26 @@ extern "C" __global__ void __closesthit__ch()
 	const unsigned int prim_idx = optixGetPrimitiveIndex();
 	optixSetPayload_1(prim_idx);
 
-	printf("%d   %d\n", ray_idx, prim_idx);
+	
+	//printf("%d   %d\n", ray_idx, prim_idx);
 
 }
 
 
 extern "C" __global__ void __intersection__is()
 {
-	const vec3f e0 = optixGetObjectRayO();
-	const vec3f e1 = optixGetObjectRayD() + e0;
-
+	//const vec3f e0 = optixGetObjectRayO();
+	//const vec3f e1 = optixGetObjectRayD() + e0;
+	uint3 idx = optixGetLaunchIndex();  // ray's index
+	const uint3 dim = optixGetLaunchDimensions();
+	unsigned int ray_idx = idx.x;
 	const unsigned int prim_idx = optixGetPrimitiveIndex();
 
-	vec3i face = params.indexBuffer[prim_idx];
-	vec3f v0 = params.vertexBuffer[face.x];
-	vec3f v1 = params.vertexBuffer[face.y];
-	vec3f v2 = params.vertexBuffer[face.z];
-
+	//vec3i face = params.indexBuffer[prim_idx];
+	//vec3f v0 = params.vertexBuffer[face.x];
+	//vec3f v1 = params.vertexBuffer[face.y];
+	//vec3f v2 = params.vertexBuffer[face.z];
+	
 	optixReportIntersection(
 		0.0f,  // t
 		0,     // rayFlags
@@ -134,6 +169,8 @@ extern "C" __global__ void __intersection__is()
 		0u   // geometry index
 	);
 
+	if (ray_idx != prim_idx)
+		printf("%d   %d\n", ray_idx, prim_idx);
 	//printf("%d   %d\n", ray_idx, prim_idx);
 
 

@@ -16,6 +16,8 @@ struct Params
 	const int2* edgeIndex;
 	const vec3f* vertexBuffer;
 	const vec3i* indexBuffer;
+	//const int* cdIndex;
+	//const int* cdBuffer;
     HitResult* hitResults;
     OptixTraversableHandle handle;
 };

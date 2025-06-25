@@ -51,6 +51,7 @@ void Bvh::setup(int prim_size, int ext_node_size, int int_node_size) {
 
 	_cpNum.Allocate(1);
 	_cpRes.Allocate(_primSize*32);
+
 	
 }
 
@@ -160,48 +161,52 @@ void Bvh::build(const AABB* boxs) {
 void Bvh::query(const AABB* boxs, const uint num,bool self) {
 	int blockDim = K_THREADS;
 	int gridDim = (num + blockDim - 1) / blockDim;
-	_stacklessMergeNodesV1._nodes.ReadToHost();
+	
+	if (_cpNumPerVert.GetSize()< num) {
+		_cpNumPerVert.Allocate(num);
+		_cpResPerVert.Allocate(num* MAX_CD_NUM_PER_VERT);
+	}
 	if (self) {
 		switch (_type)
 		{
 		case 0:
 			BvhUtils::pureBvhStacklessCD<true> << <gridDim, blockDim >> > (num, boxs, lvs()._par, lvs()._idx, lvs()._box, lvs()._lca,
 				tks()._box, tks()._rangex, tks()._rangey,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 1:
 			BvhUtils::pureBvhStackCD<true> << <gridDim, blockDim >> > (num, boxs, lvs()._par, lvs()._idx, lvs()._box, lvs()._lca,
 				tks()._box, tks()._lc, tks()._rc, tks()._mark,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 2:
 			BvhUtils::pureMergeBvhStackCD<true> << <gridDim, blockDim >> > (num, boxs,
 				_mergeNodes._nodes, lvs()._idx,
-				_cpNum, _cpRes);
+				_cpNumPerVert, _cpResPerVert);
 			break;
 		case 3:
 			BvhUtils::AosBvhStacklessCD<true> << <gridDim, blockDim >> > (num, boxs, lvs()._par, lvs()._idx, lvs()._box, lvs()._lca,
 				_stacklessMergeNodes._nodes,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 4:
 			BvhUtils::AosBvhStacklessCDV1<true> << <gridDim, blockDim >> > (num, boxs, intSize(),lvs()._idx,
 				_stacklessMergeNodesV1._nodes,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 11:
 			BvhUtils::pureMergeBvhStackCD<true> << <gridDim, blockDim >> > (num, boxs,
 				_mergeNodes._nodes, lvs()._idx,
-				_cpNum, _cpRes);
+				_cpNumPerVert, _cpResPerVert);
 			break;
 		case 12:
 			BvhUtils::pureMergeBvhStackSortElementCD<true> << <gridDim, blockDim >> > (num, boxs,
 				_mergeNodes._nodes, lvs()._idx,
-				_cpNum, _cpRes);
+				_cpNumPerVert, _cpResPerVert);
 			break;
 		}
 	}
@@ -211,49 +216,50 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 		case 0:
 			BvhUtils::pureBvhStacklessCD<false> << <gridDim, blockDim >> > (num, boxs, lvs()._par, lvs()._idx, lvs()._box, lvs()._lca,
 				tks()._box, tks()._rangex, tks()._rangey,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 1:
 			BvhUtils::pureBvhStackCD<false> << <gridDim, blockDim >> > (num, boxs, lvs()._par, lvs()._idx, lvs()._box, lvs()._lca,
 				tks()._box, tks()._lc, tks()._rc, tks()._mark,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 2:
 			BvhUtils::pureMergeBvhStackCD<false> << <gridDim, blockDim >> > (num, boxs,
 				_mergeNodes._nodes, lvs()._idx,
-				_cpNum, _cpRes);
+				_cpNumPerVert, _cpResPerVert);
 			break;
 		case 3:
 			BvhUtils::AosBvhStacklessCD<false> << <gridDim, blockDim >> > (num, boxs, lvs()._par, lvs()._idx, lvs()._box, lvs()._lca,
 				_stacklessMergeNodes._nodes,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 4:
 			BvhUtils::AosBvhStacklessCDV1<false> << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
 				_stacklessMergeNodesV1._nodes,
-				_cpNum, _cpRes
+				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 11:
 			BvhUtils::pureMergeBvhStackCD<false> << <gridDim, blockDim >> > (num, boxs,
 				_mergeNodes._nodes, lvs()._idx,
-				_cpNum, _cpRes);
+				_cpNumPerVert, _cpResPerVert);
 			break;
 		case 12:
 			BvhUtils::pureMergeBvhStackSortElementCD<false> << <gridDim, blockDim >> > (num, boxs,
 				_mergeNodes._nodes, lvs()._idx,
-				_cpNum, _cpRes);
+				_cpNumPerVert, _cpResPerVert);
 			break;
 		}
 	}
+	_cpNumPerVert.ReadToHost();
+	int sum = 0;
+	for (int i = 0; i < num; ++i) {
+		sum += _cpNumPerVert.GetHost()[i];
+	}
 	
 
-
-	_cpNum.ReadToHost();
-	_cpRes.ReadToHost();
-
-	printf("%d\n", _cpNum.GetHost()[0]);
+	printf("%d\n", sum);
 }

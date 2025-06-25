@@ -94,6 +94,7 @@ public:
 	void createAABBModule();
 
 	OptixProgramGroup createRaygenProgramGroup();
+	OptixProgramGroup createRayPointgenProgramGroup();
 	OptixProgramGroup createMissProgramGroup();
 
 	OptixProgramGroup createHitgroupProgramGroup(bool useAnyhit, const char* entryName);
@@ -159,6 +160,19 @@ public:
 		const float thickness,
 		float transform[3][4]);
 
+	void buildAABBObstacleFromPoint(const vec3f* points,
+		unsigned int pointCnt,
+		const float thickness,
+		float transform[3][4]);
+
+	void OptixLauncher::buildAABBGeometryFromPoint(OptixAABBLauncherInfo& info,
+		OptixTraversableHandle& gasHandle,
+		OptixTraversableHandle& iasHandle,
+		const vec3f* gpuPointBuffer,
+		uint32_t pointCnt,
+		const float thickness,
+		float transform[3][4]);
+
 	void buildAABBGeometry(OptixAABBLauncherInfo& info,
 		OptixTraversableHandle& gasHandle,
 		OptixTraversableHandle& iasHandle,
@@ -176,13 +190,15 @@ public:
 
 	void launchForEdge(void* gpuVerts, void* edges, const uint numEdges);
 
+	void launchForVert(void* gpuVerts, const uint numVerts);
+
 	char log[2048];  // For error reporting from OptiX creation functions
 
 	float m_particleSphereRadius = 0.001f;
 
 	HitResult* m_gpuHitResults;
 
-	int m_type = 0; // 0.  aabb primitive   1. triangle primitive 
+	int m_type = 2; // 0.edge - triangle primitive    1. edge - aabb primitive   2. point - aabb primitive
 };
 
 
@@ -191,5 +207,6 @@ void setVertexBuffer(float3* gpuVertexBuffer, const void* verts, uint strideInBy
 
 void setAABBBuffer(AABB* AABBBuffer, const vec3f* verts, const vec3i* indexs, const float thickness, uint numAABB);
 
+void setAABBBufferFromPoints(AABB* AABBBuffer, const vec3f* verts, const float thickness, uint numAABB);
 
 #endif

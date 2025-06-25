@@ -562,12 +562,13 @@ namespace CXE {
 		__global__ void pureBvhStacklessCD(uint travPrimSize, const BOX* _box, 
 			const uint* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box,const int* _lvs_lca,
 			const BOX* _tks_box, const int* _tks_rangex, const int* _tks_rangey,
-			int* _cpNum, int2* _cpRes) {
+			int* _cpNum, int* _cpRes) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= travPrimSize) return;
 
 			int	lbd;
 			int st = 0;
+			int count = 0;
 			
 			const BOX bv = _box[idx];
 			do {
@@ -579,11 +580,16 @@ namespace CXE {
 				if (st > t) {
 					if (_lvs_box[lbd].overlaps(bv)){
 						int temp_idx = _lvs_idx[lbd];
-						//if (SELF){
-						//	if (temp_idx < idx) 
-						//		_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
-						//}
-						//else _cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
+						}
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
 					}
 					st = _lvs_lca[lbd + 1];
 				}
@@ -591,18 +597,20 @@ namespace CXE {
 					st = _lvs_lca[_tks_rangey[st] + 1];
 				}
 			} while (st != -1);
+			_cpNum[idx] = count;
 		}
 
 		template<bool SELF>
 		__global__ void AosBvhStacklessCD(uint travPrimSize, const BOX* _box,
 			const uint* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box, const int* _lvs_lca,
 			const bvhNodeV2* _nodes,
-			int* _cpNum, int2* _cpRes) {
+			int* _cpNum, int* _cpRes) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= travPrimSize) return;
 
 			int	lbd;
 			int st = 0;
+			int count = 0;
 			bvhNodeV2 node;
 			const BOX bv = _box[idx];
 			do {
@@ -618,11 +626,16 @@ namespace CXE {
 				if (st > t) {
 					if (_lvs_box[lbd].overlaps(bv)) {
 						int temp_idx = _lvs_idx[lbd];
-						//if (SELF) {
-						//	if (temp_idx < idx)
-						//		_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
-						//}
-						//else _cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
+						}
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
 					}
 					st = _lvs_lca[lbd + 1];
 				}
@@ -630,17 +643,19 @@ namespace CXE {
 					st = _lvs_lca[node.rangey + 1];
 				}
 			} while (st != -1);
+			_cpNum[idx] = count;
 		}
 
 		template<bool SELF>
 		__global__ void AosBvhStacklessCDV1(uint Size, const BOX* _box,
 			const int intSize, const int* _lvs_idx,
 			const bvhNodeV1* _nodes,
-			int* _cpNum, int2* _cpRes) {
+			int* _cpNum, int* _cpRes) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= Size) return;
 			bvhNodeV1 node;
 			int st = 0;
+			int count = 0;
 			const BOX bv = _box[idx];
 			do {
 				node = _nodes[st];
@@ -648,10 +663,16 @@ namespace CXE {
 					if (node.lc == -1) {
 						int temp_idx = _lvs_idx[st - intSize];
 						if (SELF) {
-							if (temp_idx < idx)
-								_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+							if (temp_idx < idx){
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
 						}
-						else _cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+					
 						st = node.escape;
 					}
 					else {
@@ -662,13 +683,14 @@ namespace CXE {
 					st = node.escape;
 				}
 			} while (st != -1);
+			_cpNum[idx] = count;
 		}
 
 		template<bool SELF>
 		__global__ void pureBvhStackCD(uint travPrimSize, const BOX* _box,
 			const uint* _lvs_par, const int* _lvs_idx, const BOX* _lvs_box, const int* _lvs_lca,
 			const BOX* _tks_box, const int* _tks_lc, const int* _tks_rc, const uint* _tks_mark,
-			int* _cpNum, int2* _cpRes) {
+			int* _cpNum, int* _cpRes) {
 			int idx = threadIdx.x + blockIdx.x * blockDim.x;
 			if (idx >= travPrimSize) return;
 			const BOX bv = _box[idx];
@@ -676,7 +698,7 @@ namespace CXE {
 			uint stack[32];			// This is dynamically sized through templating
 			uint* stackPtr = stack;
 			*(stackPtr++) = 0;					// Push
-			int idxL, idxR, temp_idx;
+			int idxL, idxR,count;
 			uint mark;
 			while (stackPtr != stack) {
 				uint nodeIdx = *(--stackPtr);	// Pop
@@ -685,16 +707,20 @@ namespace CXE {
 				idxR = _tks_rc[nodeIdx];
 				mark = _tks_mark[nodeIdx];
 				
-				if (mark & 1) {
-					temp_idx = _lvs_idx[idxL];
-					if (_lvs_box[idxL].overlaps(bv))
-						if (SELF){
-							if (temp_idx < idx) 
-								_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);				
+				if (mark & 1) {					
+					if (_lvs_box[idxL].overlaps(bv)) {
+						int temp_idx = _lvs_idx[idxL];
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
 						}
 						else {
-							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
 						}
+					}
 				}
 				else {
 					if (bv.overlaps(_tks_box[idxL])) {
@@ -703,15 +729,19 @@ namespace CXE {
 				}
 
 				if (mark & 2) {
-					temp_idx = _lvs_idx[idxR];
-					if (_lvs_box[idxR].overlaps(bv))
+					if (_lvs_box[idxR].overlaps(bv)){
+						int temp_idx = _lvs_idx[idxR];
 						if (SELF) {
-							if (temp_idx < idx)
-								_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
 						}
 						else {
-							_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
 						}
+					}
 				}
 				else {
 					if (bv.overlaps(_tks_box[idxR])) {
@@ -720,56 +750,39 @@ namespace CXE {
 				}
 
 			}
+			_cpNum[idx] = count;
 		}
 
 		template<bool SELF>
 		__global__ void pureMergeBvhStackCD(uint travPrimSize, const BOX* _box,
 			bvhNode* _nodes, int* _lvs_idx,
-			int* _cpNum, int2* _cpRes) {
+			int* _cpNum, int* _cpRes) {
 			int idx = threadIdx.x + blockIdx.x * blockDim.x;
 			if (idx >= travPrimSize) return;
 			const BOX bv = _box[idx];
+			int count = 0;
 
 			int stack[32];			// This is dynamically sized through templating
 			int* stackPtr = stack;
-			*(stackPtr++) = 0;					// Push
-			int temp_idx;
+			*(stackPtr++) = 0;					// Push		
 			while (stackPtr != stack) {
-				//int nodeIdx = *(--stackPtr);	// Pop
-				//bvhNode node = _nodes[nodeIdx];
-				//
-				//if (bv.overlaps(node.bounds[0])) {
-				//	if (node.lc & 0x80000000) {
-				//		temp_idx = _lvs_idx[node.lc & 0x7fffffff];
-				//		if (temp_idx < idx) 
-				//			_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);	
-				//	}
-				//	else {
-				//		*(stackPtr++) = node.lc;
-				//	}
-				//}
-				//
-				//if (bv.overlaps(node.bounds[1])) {
-				//	if (node.rc & 0x80000000) {
-				//		temp_idx = _lvs_idx[node.rc & 0x7fffffff];
-				//		if (temp_idx < idx)
-				//			_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
-				//
-				//	}
-				//	else {
-				//		*(stackPtr++) = node.rc;
-				//	}
-				//}
 
 				uint32_t nodeIdx = *(--stackPtr);	// Pop
 				bool isLeaf = nodeIdx & 0x80000000;
 				nodeIdx = nodeIdx & 0x7FFFFFFF;
 
 				if (isLeaf) {
-					temp_idx = _lvs_idx[nodeIdx];
-					//if (SELF)
-					//	if (temp_idx >= idx) continue;
-					//_cpRes[atomicAdd(_cpNum, 1)] = make_int2(temp_idx, idx);
+					int temp_idx = _lvs_idx[nodeIdx];
+					if (SELF) {
+						if (temp_idx < idx) {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+					}
+					else {
+						_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+						count++;
+					}
 					continue;
 				}
 
@@ -784,15 +797,17 @@ namespace CXE {
 				}
 
 			}
+			_cpNum[idx] = count;
 		}
 
 		template<bool SELF>
 		__global__ void pureMergeBvhStackSortElementCD(uint travPrimSize, const BOX* _box,
 			bvhNode* _nodes, int* _lvs_idx,
-			int* _cpNum, int2* _cpRes) {
+			int* _cpNum, int* _cpRes) {
 			int idx = threadIdx.x + blockIdx.x * blockDim.x;
 			if (idx >= travPrimSize) return;
 			const BOX bv = _box[_lvs_idx[idx]];
+			int count = 0;
 
 			int stack[32];			// This is dynamically sized through templating
 			int* stackPtr = stack;
@@ -805,9 +820,16 @@ namespace CXE {
 
 				if (isLeaf) {
 					int temp_idx = _lvs_idx[nodeIdx];
-					if (SELF)
-						if (temp_idx >= idx) continue;
-					_cpRes[atomicAdd(_cpNum, 1)] = make_int2(nodeIdx, idx);
+					if (SELF) {
+						if (temp_idx < idx) {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+					}
+					else {
+						_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+						count++;
+					}
 					continue;
 				}
 
@@ -822,6 +844,7 @@ namespace CXE {
 				}
 
 			}
+			_cpNum[idx] = count;
 		}
 
 		__global__ void refitIntNode(int size, 

@@ -12,6 +12,8 @@
 #include "CudaThrustUtils.hpp"
 #include "DeviceHostVector.h"
 
+#define MAX_CD_NUM_PER_VERT 64
+
 namespace CXE {
 
 	class Bvh {
@@ -56,6 +58,9 @@ namespace CXE {
 
 		DeviceHostVector<int> _cpNum;
 		DeviceHostVector<int2> _cpRes;
+
+		DeviceHostVector<int> _cpNumPerVert;
+		DeviceHostVector<int> _cpResPerVert;
 
 		int _type =  4; // 0. SOA stackless query     bottom to top tree build
 						// 1. SOA stack 32 query      bottom to top tree build

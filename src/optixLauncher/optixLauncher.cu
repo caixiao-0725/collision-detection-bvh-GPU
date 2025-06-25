@@ -40,6 +40,23 @@ __global__ void setAABBBufferKernel(AABB* aabbBuffer,
 	aabbBuffer[i] = aabb;
 }
 
+__global__ void setAABBBufferFromPointsKernel(AABB* aabbBuffer,
+	const vec3f* verts,
+	const float thickness,
+	uint numAABB)
+{
+	uint i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i >= numAABB)
+		return;
+	vec3f v0 = verts[i];
+
+	AABB aabb(v0);
+
+	aabb.enlarges(thickness);
+
+	aabbBuffer[i] = aabb;
+}
+
 void setVertexBuffer(float3* gpuVertexBuffer, const void* verts, uint strideInBytes, uint posOffsetInBytes, uint numVertices)
 {
 	int block = 256;
@@ -53,4 +70,11 @@ void setAABBBuffer(AABB* AABBBuffer, const vec3f* verts, const vec3i* indexs, co
 	int block = 256;
 	int grid = (numAABB + block - 1) / block;
 	setAABBBufferKernel << <grid, block >> > (AABBBuffer, verts, indexs, thickness, numAABB);
+}
+
+void setAABBBufferFromPoints(AABB* AABBBuffer, const vec3f* verts, const float thickness, uint numAABB)
+{
+	int block = 256;
+	int grid = (numAABB + block - 1) / block;
+	setAABBBufferFromPointsKernel << <grid, block >> > (AABBBuffer, verts, thickness, numAABB);
 }

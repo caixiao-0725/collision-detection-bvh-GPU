@@ -197,7 +197,8 @@ void OptixLauncher::createAABBModule() {
 	size_t sizeof_log = sizeof(log);
 
 	size_t optixPtxSize = 0;
-	std::string fullPath = get_asset_path() + "ptx/cuda_compile_ptx_1_generated_edgeTriangles.cu.ptx";
+	std::string fullPath = "E:/github/collision-detection-bvh-GPU/build/src/optixLauncher/cuda_compile_ptx_1_generated_edgeTriangles.cu.ptx";
+	//std::string fullPath = get_asset_path() + "ptx/cuda_compile_ptx_1_generated_edgeTriangles.cu.ptx";
 	std::cout << "PTX: " << fullPath << std::endl;
 	const char* optixPtx = getInputData(fullPath.c_str(), optixPtxSize);
 
@@ -228,15 +229,21 @@ void OptixLauncher::init()
 	CUDA_CHECK(cudaStreamCreate(&m_stream));
 	
 	createContext();
-	if (m_type == 0) // AABB primitive
+	if (m_type)  // AABB primitive
 		createAABBModule();
-	else // triangle primitive
+	else 
 		createTriangleModule();
 
-	m_raygenProgGroup = createRaygenProgramGroup();
+	if (m_type == 2) {
+		m_raygenProgGroup = createRayPointgenProgramGroup();
+	}
+	else {
+		m_raygenProgGroup = createRaygenProgramGroup();
+	}
+	
 	m_missProgGroup = createMissProgramGroup();
-	if (m_type == 0) // AABB primitive
-		m_obstacleHitgroupProgGroup = createAABBHitgroupProgramGroup(true, "__anyhit__ch", "__intersection__is");
+	if (m_type) // AABB primitive
+		m_obstacleHitgroupProgGroup = createAABBHitgroupProgramGroup(true, "__anyhit__ch", "__intersection__is");//
 	else // triangle primitive
 		m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(true,"__anyhit__ch");
 	//m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(false, "__closesthit__ch");
@@ -331,9 +338,9 @@ OptixProgramGroup OptixLauncher::createAABBHitgroupProgramGroup(bool useAnyhit, 
 		OptixProgramGroupDesc hitgroup_prog_group_desc = {};
 		hitgroup_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
 		hitgroup_prog_group_desc.hitgroup.moduleAH = nullptr;
-		hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = nullptr;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = anyhitName;
 		hitgroup_prog_group_desc.hitgroup.moduleCH = m_module;
-		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = anyhitName;
+		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = nullptr;
 		hitgroup_prog_group_desc.hitgroup.moduleIS = m_module;
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = intersectName;
 		sizeof_log = sizeof(log);
@@ -357,6 +364,30 @@ OptixProgramGroup OptixLauncher::createRaygenProgramGroup()
 	raygen_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
 	raygen_prog_group_desc.raygen.module = m_module;
 	raygen_prog_group_desc.raygen.entryFunctionName = "__raygen__rg_edge";
+
+	size_t sizeof_log = sizeof(log);
+
+	OptixProgramGroup raygen_prog_group;
+
+	OPTIX_CHECK_LOG(optixProgramGroupCreate(m_context,
+		&raygen_prog_group_desc,
+		1,  // num program groups
+		&program_group_options,
+		log,
+		&sizeof_log,
+		&raygen_prog_group));
+
+	return raygen_prog_group;
+}
+
+OptixProgramGroup OptixLauncher::createRayPointgenProgramGroup()
+{
+	OptixProgramGroupOptions program_group_options = {};  // Initialize to zeros
+
+	OptixProgramGroupDesc raygen_prog_group_desc = {};  //
+	raygen_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+	raygen_prog_group_desc.raygen.module = m_module;
+	raygen_prog_group_desc.raygen.entryFunctionName = "__raygen__rg_point";
 
 	size_t sizeof_log = sizeof(log);
 
@@ -522,6 +553,38 @@ void OptixLauncher::buildTriangleGeometryWithGPUData(OptixTriangleLauncherInfo& 
 	}
 }
 
+void OptixLauncher::buildAABBObstacleFromPoint(const vec3f* points,
+	unsigned int pointCnt,
+	const float thickness,
+	float transform[3][4]) {
+	buildAABBGeometryFromPoint(m_obstacleAABBLauncherInfo,
+		m_obstacleGASHandle,
+		m_obstacleIASHandle,
+		points,
+		pointCnt,
+		thickness,
+		transform);
+}
+
+void OptixLauncher::buildAABBGeometryFromPoint(OptixAABBLauncherInfo& info,
+	OptixTraversableHandle& gasHandle,
+	OptixTraversableHandle& iasHandle,
+	const vec3f* gpuPointBuffer,
+	uint32_t pointCnt,
+	const float thickness,
+	float transform[3][4])
+{
+	info.numAABB = pointCnt; // each triangle has one AABB
+	const size_t AABBSizeInBytes = info.numAABB * sizeof(AABB);
+	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.AABBBuffer), AABBSizeInBytes));
+
+	setAABBBufferFromPoints((AABB*)info.AABBBuffer,
+		gpuPointBuffer,
+		thickness,
+		pointCnt);
+
+	buildAABBGeometryWithGPUData(info, gasHandle, iasHandle, pointCnt, transform);
+}
 
 
 void OptixLauncher::buildAABBObstacle(const vec3f* verts,
@@ -648,6 +711,20 @@ void OptixLauncher::launchForEdge(void* gpuVerts, void* edges, const uint numEdg
 		CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(m_gpuParams), &m_cpuParams, sizeof(Params), cudaMemcpyHostToDevice));
 	}
 	OPTIX_CHECK(optixLaunch(m_obstaclePipeline, 0, m_gpuParams, sizeof(Params), &m_obstacleSbt, numEdges, 1, 1));
+}
+
+void OptixLauncher::launchForVert(void* gpuVerts, const uint numVerts) {
+
+	if ((m_cpuParams.vertexs != gpuVerts) ||
+		(m_cpuParams.hitResults != m_gpuHitResults) ||
+		(m_cpuParams.handle != m_obstacleGASHandle))
+	{
+		m_cpuParams.vertexs = (float3*)gpuVerts;
+		m_cpuParams.hitResults = m_gpuHitResults;
+		m_cpuParams.handle = m_obstacleGASHandle;
+		CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(m_gpuParams), &m_cpuParams, sizeof(Params), cudaMemcpyHostToDevice));
+	}
+	OPTIX_CHECK(optixLaunch(m_obstaclePipeline, 0, m_gpuParams, sizeof(Params), &m_obstacleSbt, numVerts, 1, 1));
 }
 
 
