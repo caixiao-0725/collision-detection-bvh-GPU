@@ -100,8 +100,9 @@ public:
     }
 };
 
-struct __align__(16) qNode {
+struct qNode {
     int lc;
+    int escape;
     AABBhalf bound; // 8 bytes
 };
 

@@ -10,7 +10,8 @@
 
 using namespace CXE;
 
-//#include "BvhUtils.cuh"
+
+
 int main() {
     const int N =  100000;
     const float R = 0.001f;
@@ -35,21 +36,66 @@ int main() {
     //
     //printf("\n");
     //
-	//a &= 0x7F800000; // Clear the sign bit
-	//a |= 0x00002000; // Set the exponent to 1
-    //for (int bit = 31;bit >= 0;bit--) {
-    //    printf("%d", (a >> bit) & 1);
+    //uint sign;
+    //uint u;
+    //uint result;
+    //uint remainder;
+    //sign = ((a >> 17U) & 0x8000U);
+    //u = a & 0x7fffffffU;
+    //
+    //if (u >= 0x38000000U) {
+    //    remainder = u << 19U;
+    //    u -= 0x38000000U;
+    //    result = (sign | (u >> 13U));
+    //}
+    //else  if (u < 0x33000001U) { // +0/-0
+    //    remainder = u;
+    //    result = sign;
+    //}
+    //else { // Denormal numbers
+    //    const unsigned int exponent = u >> 23U;
+    //    const unsigned int shift = 0x7eU - exponent;
+    //    unsigned int mantissa = (u & 0x7fffffU);
+    //    mantissa |= 0x800000U;
+    //    remainder = mantissa << (32U - shift);
+    //    result = (sign | (mantissa >> shift));
+    //    result &= 0x0000FFFFU;
     //}
     //
-    //temp = *reinterpret_cast<float*>(&a);
+    //
+    //uint exponent;
+    //uint b;
+    //uint mantissa;
+	//sign = ((result & 0x8000U) >> 14U) & 1U;
+    //exponent = (result >> 10U) & 0x1fU;
+	//mantissa = (result & 0x3ffU) << 13U;
+    //if (exponent == 0U) { /* Denorm or Zero */
+    //    if (mantissa != 0U) {
+    //        unsigned int msb;
+    //        exponent = 0x71U;
+    //        do {
+    //            msb = (mantissa & 0x400000U);
+    //            mantissa <<= 1U; /* normalize */
+    //            --exponent;
+    //        } while (msb == 0U);
+    //        mantissa &= 0x7fffffU; /* 1.mantissa is implicit */
+    //    }
+    //}
+    //else {
+    //    exponent += 0x70U;
+    //}
+    //u= ((sign << 31U) | (exponent << 23U) | mantissa);
+    //
+    //temp = *reinterpret_cast<float*>(&u);
 	//printf("\nCleared sign bit: %.10f\n", temp);
 
     aabbs.ReadToDevice();
     Bvh A;
-    A._type = 6;
+    A._type = 7;
     A.setup(N, N, N - 1);
     A.build(aabbs.GetDevice());
     A.query(aabbs.GetDevice(), aabbs.GetSize(),true);
     return 0;
 }
+
 

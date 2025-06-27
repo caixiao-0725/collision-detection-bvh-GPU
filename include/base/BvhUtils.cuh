@@ -669,11 +669,11 @@ namespace CXE {
 				escape >>= 1;
 				escape += (bLeaf ? intSize : 0);
 			}
-			_escape[idx + intSize] = escape;
-
+			//_escape[idx + intSize] = escape;
+			
 			qNode node;
 			node.lc = -1;
-
+			node.escape = escape;
 			AABB2AABBhalf(_lvs_box[idx], node.bound);
 
 			_nodes[idx + intSize] = node;
@@ -689,13 +689,117 @@ namespace CXE {
 				internalEscape >>= 1;
 				internalEscape += (bLeaf ? intSize : 0);
 			}
-			_escape[newId] = internalEscape;
+			//_escape[newId] = internalEscape;
 			
 			qNode internalNode;
 			
 			internalNode.lc = _unorderedTks_mark[idx] & 1 ? _unorderedTks_lc[idx] + intSize : _tkMap[_unorderedTks_lc[idx]];
 			AABB2AABBhalf(_unorderedTks_box[idx], internalNode.bound);
+			internalNode.escape = internalEscape;
+			_nodes[newId] = internalNode;
+		}
+
+		__device__ __host__ __forceinline__ void AABB2AABBull(AABB& aabb, ulonglong2& ll) {
+			__half min_x;
+			ullint min_x_uint;
+			min_x = __float2half_rd(aabb._min.x);
+			min_x_uint = *reinterpret_cast<ullint*>(&min_x);
+			ll.x |= (min_x_uint & 0x8000) << 44;
+			ll.x |= (min_x_uint & 0x3FFF) << 30;
+
+			__half min_y;
+			ullint min_y_uint;
+			min_y = __float2half_rd(aabb._min.y);
+			min_y_uint = *reinterpret_cast<ullint*>(&min_y);
+			ll.x |= (min_y_uint & 0x8000) << 29;
+			ll.x |= (min_y_uint & 0x3FFF) << 15;
+
+			__half min_z;
+			ullint min_z_uint;
+			min_z = __float2half_rd(aabb._min.z);
+			min_z_uint = *reinterpret_cast<ullint*>(&min_z);
+			ll.x |= (min_z_uint & 0x8000) << 14;
+			ll.x |= (min_z_uint & 0x3FFF);
+
+			__half max_x;
+			ullint max_x_uint;
+			max_x = __float2half_ru(aabb._max.x);
+			max_x_uint = *reinterpret_cast<ullint*>(&max_x);
+			ll.y |= (max_x_uint & 0x8000) << 44;
+			ll.y |= (max_x_uint & 0x3FFF) << 30;
+
+			__half max_y;
+			ullint max_y_uint;
+			max_y = __float2half_ru(aabb._max.y);
+			max_y_uint = *reinterpret_cast<ullint*>(&max_y);
+			ll.y |= (max_y_uint & 0x8000) << 29;
+			ll.y |= (max_y_uint & 0x3FFF) << 15;
+
+			__half max_z;
+			ullint max_z_uint;
+			max_z = __float2half_ru(aabb._max.z);
+			max_z_uint = *reinterpret_cast<ullint*>(&max_z);
+			ll.y |= (max_z_uint & 0x8000) << 14;
+			ll.y |= (max_z_uint & 0x3FFF);
+
+		}
+
+		__global__ void reorderUllintNode(int intSize, const int* _tkMap, int* _lvs_lca, AABB* _lvs_box,
+			int* _unorderedTks_lc, uint* _unorderedTks_mark, int* _unorderedTks_rangey, AABB* _unorderedTks_box,
+			ulonglong2* _nodes
+		) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= intSize + 1) return;
+			ulonglong2 node{0,0};
+			AABB2AABBull(_lvs_box[idx], node);
+			int escape = _lvs_lca[idx + 1];			
+			node.x &= 0x00001FFFFFFFFFFF; // clear the escape bits
+			node.y &= 0x00001FFFFFFFFFFF;
+			if (escape == -1) {
+				node.y |= (ullint)0x7FFFF << 45;
+				
+			}else
+			{
+				int bLeaf = escape & 1;
+				escape >>= 1;
+				escape += (bLeaf ? intSize : 0);
+				node.y |= static_cast<ullint>(escape) << 45;				
+			}
 			
+			node.x |= (ullint)0x7FFFF << 45;
+			
+
+			_nodes[idx + intSize] = node;
+
+			if (idx >= intSize) return;
+
+			ulonglong2 internalNode{ 0,0 };
+
+			AABB2AABBull(_unorderedTks_box[idx], internalNode);
+			internalNode.x &= 0x00001FFFFFFFFFFF; // clear the escape bits
+			internalNode.y &= 0x00001FFFFFFFFFFF;
+			int newId = _tkMap[idx];
+
+			int internalEscape = _lvs_lca[_unorderedTks_rangey[idx] + 1];
+
+			if (internalEscape == -1) {
+				internalNode.y |= (ullint)0x7FFFF << 45;
+			} 
+			else{
+				int bLeaf = internalEscape & 1;
+				internalEscape >>= 1;
+				internalEscape += (bLeaf ? intSize : 0);
+				internalNode.y |= static_cast<ullint>(internalEscape) << 45;
+			}
+			
+			int lc = _unorderedTks_mark[idx] & 1 ? _unorderedTks_lc[idx] + intSize : _tkMap[_unorderedTks_lc[idx]];
+
+			if (lc == -1) {
+				internalNode.x |= (ullint)0x7FFFF << 45;
+			}
+			else {
+				internalNode.x |= static_cast<ullint>(lc) << 45;
+			}
 			_nodes[newId] = internalNode;
 		}
 
@@ -880,13 +984,13 @@ namespace CXE {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= Size) return;
 			qNode node;
-			int escape;
+			//int escape;
 			int st = 0;
 			int count = 0;
 			const BOX bv = _box[idx];
 			do {
 				node = _nodes[st];
-				escape = _escape[st];
+				//escape = _escape[st];
 				if (node.bound.overlaps(bv)) {
 					if (node.lc == -1) {
 						int temp_idx = _lvs_idx[st - intSize];
@@ -901,19 +1005,132 @@ namespace CXE {
 							count++;
 						}
 
-						st = escape;
+						st = node.escape;
 					}
 					else {
 						st = node.lc;
 					}
 				}
 				else {
-					st = escape;
+					st = node.escape;
 				}
 			} while (st != -1);
 			_cpNum[idx] = count;
 		}
 		
+		__device__ __host__ __forceinline__ bool overlapsLonglong(const ulonglong2& a,const AABB& b) {
+			uint temp_u;
+			__half2 temp;
+			float2 data;
+			temp_u =   (uint)(a.x >> 30) & 0x3fff;
+			temp_u |= ((uint)(a.x >> 44) & 0x1) << 15;
+			temp_u |= ((uint)(a.y >> 30) & 0x3fff) << 16;
+			temp_u |= ((uint)(a.y >> 44) & 0x1) << 31;
+			memcpy(&temp, &temp_u, sizeof(temp_u));
+			
+			data = __half22float2(temp);
+			if (b._min.x > data.y || b._max.x < data.x) return false;
+			
+			temp_u =   (uint)(a.x >> 15) & 0x3fff;
+			temp_u |= ((uint)(a.x >> 29) & 0x1) << 15;
+			temp_u |= ((uint)(a.y >> 15) & 0x3fff) << 16;
+			temp_u |= ((uint)(a.y >> 29) & 0x1) << 31;
+			memcpy(&temp, &temp_u, sizeof(temp_u));
+			
+			data = __half22float2(temp);
+			if (b._min.y > data.y || b._max.y < data.x) return false;
+			
+			temp_u = (uint)(a.x) & 0x3fff;
+			temp_u |= ((uint)(a.x >> 14) & 0x1) << 15;
+			temp_u |= ((uint)(a.y) & 0x3fff) << 16;
+			temp_u |= ((uint)(a.y >> 14) & 0x1) << 31;
+			memcpy(&temp, &temp_u, sizeof(temp_u));
+			
+			data = __half22float2(temp);
+			if (b._min.z > data.y || b._max.z < data.x) return false;
+
+			return true;
+		}
+
+		__global__ void ll2AABB(ulonglong2* ll, int num) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= num) return;
+			ulonglong2 node = ll[idx+9];
+			AABB aabb;
+			__half2 temp;
+			float2 data;
+			uint temp_u = (uint)(node.x >> 30) & 0x3fff;
+			temp_u |= ((uint)(node.x >> 44) & 0x1) << 15;
+			temp_u |= ((uint)(node.y >> 30) & 0x3fff) << 16;
+			temp_u |= ((uint)(node.y >> 44) & 0x1) << 31;
+			memcpy(&temp, &temp_u, sizeof(temp_u));
+			data = __half22float2(temp);
+			aabb._min.x = data.x;
+			aabb._max.x = data.y;
+			temp_u = (uint)(node.x >> 15) & 0x3fff;
+			temp_u |= ((uint)(node.x >> 29) & 0x1) << 15;
+			temp_u |= ((uint)(node.y >> 15) & 0x3fff) << 16;
+			temp_u |= ((uint)(node.y >> 29) & 0x1) << 31;
+			memcpy(&temp, &temp_u, sizeof(temp_u));
+			data = __half22float2(temp);
+			aabb._min.y = data.x;
+			aabb._max.y = data.y;
+			temp_u = (uint)(node.x) & 0x3fff;
+			temp_u |= ((uint)(node.x >> 14) & 0x1) << 15;
+			temp_u |= ((uint)(node.y) & 0x3fff) << 16;
+			temp_u |= ((uint)(node.y >> 14) & 0x1) << 31;
+			memcpy(&temp, &temp_u, sizeof(temp_u));
+			data = __half22float2(temp);
+			aabb._min.z = data.x;
+			aabb._max.z = data.y;
+			printf("min: %f %f %f  max: %f %f %f\n", aabb._min.x, aabb._min.y, aabb._min.z, aabb._max.x, aabb._max.y, aabb._max.z);
+		}
+
+		template<bool SELF>
+		__global__ void UllintCD(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const ulonglong2* _nodes,
+			int* _cpNum, int* _cpRes) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= Size) return;
+			ulonglong2 node;
+			uint st = 0;
+			int count = 0;
+			uint lc;
+			uint escape;
+			const BOX bv = _box[idx];
+			do {
+				node = _nodes[st];
+				lc = node.x >> 45;
+				escape = node.y >> 45;
+				//printf("%u %u\n", lc,escape);
+				if (overlapsLonglong(node,bv)) {
+					if (lc == 0x7FFFFu) {
+						int temp_idx = _lvs_idx[st - intSize];
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
+						}
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+		
+						st = escape;
+					}
+					else {
+						st = lc;
+					}
+				}
+				else {
+					st = escape;
+				}
+			} while (st != 0x7FFFFu);
+			_cpNum[idx] = count;
+		}
+
 
 		template<bool SELF>
 		__global__ void quantilizedStacklessCD(uint Size, const BOX* _box,

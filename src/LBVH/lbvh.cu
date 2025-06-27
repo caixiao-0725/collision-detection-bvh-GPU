@@ -41,6 +41,10 @@ void Bvh::setup(int prim_size, int ext_node_size, int int_node_size) {
 		_qNodes.Allocate(2 * _intSize + 1);
 		_escape.Allocate(2 * _intSize + 1);
 		break;
+	case 7:
+		_intNodes.setup(_intSize);
+		_stacklessMergeNodesV1.setup(2 * _intSize + 1);
+		break;
 	case 11:
 		_mergeNodes.setup(_intSize);
 		break;
@@ -131,7 +135,13 @@ void Bvh::reorderIntNodes() {
 	case 6:
 		BvhUtils::reorderQNodeV1 << <gridDim, blockDim >> > (intSize(), d_tkMap, lvs()._lca, lvs()._box,
 			untks()._lc, untks()._mark, untks()._rangey, untks()._box,
-			_escape, _qNodes);
+			_escape,_qNodes);
+		break;
+	case 7:
+		BvhUtils::reorderUllintNode << <gridDim, blockDim >> > (intSize(), d_tkMap, lvs()._lca, lvs()._box,
+		untks()._lc, untks()._mark, untks()._rangey, untks()._box,
+		_stacklessMergeNodesV1._quantilizedNodes);
+		
 		break;
 	default:
 		break;
@@ -232,6 +242,13 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 			//BvhUtils::reorderQNodeV1<true> << <gridDim, blockDim >> >
 			BvhUtils::qNodeCD<true> << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
 				_escape, _qNodes,
+				_cpNumPerVert, _cpResPerVert
+				);
+			break;
+		case 7:
+			//BvhUtils::ll2AABB << <gridDim, blockDim >> > (_stacklessMergeNodesV1._quantilizedNodes, 10);
+			BvhUtils::UllintCD<true> <<<gridDim, blockDim >>> (num, boxs, intSize(), lvs()._idx,
+				_stacklessMergeNodesV1._quantilizedNodes,
 				_cpNumPerVert, _cpResPerVert
 				);
 			break;
