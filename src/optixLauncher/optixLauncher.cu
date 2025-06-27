@@ -54,6 +54,12 @@ __global__ void setAABBBufferFromPointsKernel(AABB* aabbBuffer,
 
 	aabb.enlarges(thickness);
 
+	//if (i == 24150) {
+	//	printf("AABB %d: %f, %f, %f, %f, %f, %f\n", i,
+	//		aabb._min.x, aabb._min.y, aabb._min.z,
+	//		aabb._max.x, aabb._max.y, aabb._max.z);
+	//}
+
 	aabbBuffer[i] = aabb;
 }
 

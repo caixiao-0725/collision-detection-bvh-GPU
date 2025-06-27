@@ -102,14 +102,12 @@ int main0() {
 
     temp.launchForEdge((void*)edges_points.GetDevice(), (void*)edges_indexs.GetDevice(), edges_indexs.GetSize());
 
-    HitResult result_cpu[20];
-	cudaMemcpy(result_cpu, temp.m_gpuHitResults, sizeof(HitResult) * 20, cudaMemcpyDeviceToHost);
 
 	return 0;
 }
 
 int main() {
-    const int N = 10;
+    const int N = 100000;
     const float R = 0.001f;
 
     printf("Generating Data...\n");
@@ -117,20 +115,28 @@ int main() {
     points.Allocate(N);
     srand(1);
     for (size_t i = 0; i < N; i++) {
-        //points.GetHost()[i] = vec3f(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
-        points.GetHost()[i] = vec3f(i*R*1.1, i*R*1.1, i*R*1.1);
+        points.GetHost()[i] = vec3f(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX);
+        //points.GetHost()[i] = vec3f(i*R*1.1, i*R*1.1, i*R*1.1);
     }
 
     points.ReadToDevice();
 
-    OptixLauncher temp;
-    temp.init();
+    OptixLauncher optix;
+    optix.init();
 
     uint32_t pointCount = points.GetSize();
     float transform[3][4];
 
-    temp.buildAABBObstacleFromPoint(points, pointCount, R*2, transform);
+    optix.buildAABBObstacleFromPoint(points, pointCount, R*2, transform);
 
-    temp.launchForVert((void*)points.GetDevice(), points.GetSize());
+    optix.launchForVert((void*)points.GetDevice(), points.GetSize());
+
+    optix.m_cdIndex.ReadToHost();
+	optix.m_cdBuffer.ReadToHost();
+    int sum = 0;
+	for (size_t i = 0; i < optix.m_cdIndex.GetSize(); i++) {
+		sum += optix.m_cdIndex.GetHost()[i];
+	}
+	std::cout << "Collision Count: " << sum << std::endl;
     return 0;
 }

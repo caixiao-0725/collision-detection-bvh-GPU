@@ -47,7 +47,8 @@
 .global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS12placeholders3_10E[1];
 .global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS3seqE[1];
 .global .align 1 .b8 _ZN47_INTERNAL_dad48480_16_edgeTriangles_cu_8dab212d6thrust20THRUST_200700_520_NS6deviceE[1];
-.global .align 1 .b8 $str[9] = {37, 100, 32, 32, 32, 37, 100, 10};
+.global .align 1 .b8 $str[8] = {97, 110, 121, 104, 105, 116, 10};
+.global .align 1 .b8 $str$1[9] = {37, 100, 32, 32, 32, 37, 100, 10};
 
 .visible .entry __miss__ms()
 {
@@ -117,7 +118,7 @@
 .visible .entry __raygen__rg_point()
 {
 	.reg .f32 	%f<10>;
-	.reg .b32 	%r<80>;
+	.reg .b32 	%r<78>;
 	.reg .b64 	%rd<6>;
 
 
@@ -132,13 +133,14 @@
 	ld.global.f32 	%f2, [%rd5+4];
 	ld.global.f32 	%f3, [%rd5+8];
 	ld.const.u64 	%rd1, [params+40];
+	mov.f32 	%f4, 0f3F800000;
+	mov.f32 	%f8, 0f2B8CBCCC;
 	mov.f32 	%f9, 0f00000000;
 	mov.u32 	%r40, 255;
 	mov.u32 	%r41, 10;
-	mov.u32 	%r45, 2;
 	mov.u32 	%r77, 0;
 	// begin inline asm
-	call(%r7,%r8,%r9,%r10,%r11,%r12,%r13,%r14,%r15,%r16,%r17,%r18,%r19,%r20,%r21,%r22,%r23,%r24,%r25,%r26,%r27,%r28,%r29,%r30,%r31,%r32,%r33,%r34,%r35,%r36,%r37,%r38),_optix_trace_typed_32,(%r77,%rd1,%f1,%f2,%f3,%f9,%f9,%f9,%f9,%f9,%f9,%r40,%r41,%r77,%r77,%r77,%r45,%r78,%r79,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77);
+	call(%r7,%r8,%r9,%r10,%r11,%r12,%r13,%r14,%r15,%r16,%r17,%r18,%r19,%r20,%r21,%r22,%r23,%r24,%r25,%r26,%r27,%r28,%r29,%r30,%r31,%r32,%r33,%r34,%r35,%r36,%r37,%r38),_optix_trace_typed_32,(%r77,%rd1,%f1,%f2,%f3,%f4,%f9,%f9,%f9,%f8,%f9,%r40,%r41,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77,%r77);
 	// end inline asm
 	ret;
 
@@ -146,44 +148,32 @@
 	// .globl	__anyhit__ch
 .visible .entry __anyhit__ch()
 {
-	.local .align 8 .b8 	__local_depot3[8];
-	.reg .b64 	%SP;
-	.reg .b64 	%SPL;
-	.reg .pred 	%p<2>;
-	.reg .b32 	%r<15>;
-	.reg .b64 	%rd<5>;
+	.reg .b32 	%r<13>;
+	.reg .b64 	%rd<3>;
 
 
-	mov.u64 	%SPL, __local_depot3;
-	cvta.local.u64 	%SP, %SPL;
 	// begin inline asm
-	call (%r3), _optix_get_launch_index_x, ();
+	call (%r1), _optix_get_launch_index_x, ();
 	// end inline asm
-	mov.u32 	%r9, 0;
+	mov.u32 	%r7, 0;
 	// begin inline asm
-	call _optix_set_payload, (%r9, %r3);
+	call _optix_set_payload, (%r7, %r1);
 	// end inline asm
 	// begin inline asm
-	call (%r11), _optix_read_primitive_idx, ();
+	call (%r9), _optix_read_primitive_idx, ();
 	// end inline asm
-	mov.u32 	%r12, 1;
+	mov.u32 	%r10, 1;
 	// begin inline asm
-	call _optix_set_payload, (%r12, %r11);
+	call _optix_set_payload, (%r10, %r9);
 	// end inline asm
-	setp.eq.s32 	%p1, %r3, %r11;
-	@%p1 bra 	$L__BB3_2;
-
-	add.u64 	%rd1, %SP, 0;
-	add.u64 	%rd2, %SPL, 0;
-	st.local.v2.u32 	[%rd2], {%r3, %r11};
-	mov.u64 	%rd3, $str;
-	cvta.global.u64 	%rd4, %rd3;
+	mov.u64 	%rd1, $str;
+	cvta.global.u64 	%rd2, %rd1;
 	{ // callseq 0, 0
 	.reg .b32 temp_param_reg;
 	.param .b64 param0;
-	st.param.b64 	[param0+0], %rd4;
+	st.param.b64 	[param0+0], %rd2;
 	.param .b64 param1;
-	st.param.b64 	[param1+0], %rd1;
+	st.param.b64 	[param1+0], 0;
 	.param .b32 retval0;
 	call.uni (retval0), 
 	vprintf, 
@@ -191,10 +181,8 @@
 	param0, 
 	param1
 	);
-	ld.param.b32 	%r14, [retval0+0];
+	ld.param.b32 	%r12, [retval0+0];
 	} // callseq 0
-
-$L__BB3_2:
 	// begin inline asm
 	call _optix_ignore_intersection, ();
 	// end inline asm
@@ -204,33 +192,58 @@ $L__BB3_2:
 	// .globl	__closesthit__ch
 .visible .entry __closesthit__ch()
 {
-	.local .align 8 .b8 	__local_depot4[8];
-	.reg .b64 	%SP;
-	.reg .b64 	%SPL;
-	.reg .b32 	%r<13>;
-	.reg .b64 	%rd<5>;
+	.reg .b32 	%r<12>;
 
 
-	mov.u64 	%SPL, __local_depot4;
-	cvta.local.u64 	%SP, %SPL;
-	add.u64 	%rd1, %SP, 0;
-	add.u64 	%rd2, %SPL, 0;
-	mov.u32 	%r7, 0;
 	// begin inline asm
 	call (%r1), _optix_get_launch_index_x, ();
 	// end inline asm
+	mov.u32 	%r7, 0;
 	// begin inline asm
 	call _optix_set_payload, (%r7, %r1);
 	// end inline asm
-	mov.u32 	%r10, 1;
 	// begin inline asm
 	call (%r9), _optix_read_primitive_idx, ();
 	// end inline asm
+	mov.u32 	%r10, 1;
 	// begin inline asm
 	call _optix_set_payload, (%r10, %r9);
 	// end inline asm
-	st.local.v2.u32 	[%rd2], {%r1, %r9};
-	mov.u64 	%rd3, $str;
+	ret;
+
+}
+	// .globl	__intersection__is
+.visible .entry __intersection__is()
+{
+	.local .align 8 .b8 	__local_depot5[8];
+	.reg .b64 	%SP;
+	.reg .b64 	%SPL;
+	.reg .pred 	%p<2>;
+	.reg .f32 	%f<2>;
+	.reg .b32 	%r<16>;
+	.reg .b64 	%rd<5>;
+
+
+	mov.u64 	%SPL, __local_depot5;
+	cvta.local.u64 	%SP, %SPL;
+	// begin inline asm
+	call (%r3), _optix_get_launch_index_x, ();
+	// end inline asm
+	// begin inline asm
+	call (%r9), _optix_read_primitive_idx, ();
+	// end inline asm
+	mov.f32 	%f1, 0f00000000;
+	mov.u32 	%r14, 0;
+	// begin inline asm
+	call (%r10), _optix_report_intersection_3, (%f1, %r14, %r14, %r14, %r14);
+	// end inline asm
+	setp.eq.s32 	%p1, %r3, %r9;
+	@%p1 bra 	$L__BB5_2;
+
+	add.u64 	%rd1, %SP, 0;
+	add.u64 	%rd2, %SPL, 0;
+	st.local.v2.u32 	[%rd2], {%r3, %r9};
+	mov.u64 	%rd3, $str$1;
 	cvta.global.u64 	%rd4, %rd3;
 	{ // callseq 1, 0
 	.reg .b32 temp_param_reg;
@@ -245,18 +258,10 @@ $L__BB3_2:
 	param0, 
 	param1
 	);
-	ld.param.b32 	%r12, [retval0+0];
+	ld.param.b32 	%r15, [retval0+0];
 	} // callseq 1
-	ret;
 
-}
-	// .globl	__intersection__is
-.visible .entry __intersection__is()
-{
-	.reg .f32 	%f<7>;
-	.reg .b32 	%r<2>;
-
-
+$L__BB5_2:
 	ret;
 
 }

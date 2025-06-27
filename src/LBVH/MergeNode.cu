@@ -20,5 +20,6 @@ namespace CXE {
 	void StacklessMergeNodeV1Array::setup(const int Size) {
 		_size = Size;
 		_nodes.Allocate(_size);
+		_quantilizedNodes.Allocate(_size);
 	}
 }

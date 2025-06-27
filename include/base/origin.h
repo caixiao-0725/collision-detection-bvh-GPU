@@ -1,7 +1,7 @@
 #ifndef __VEC_H__
 #define __VEC_H__
 #include <thrust/extrema.h>
-
+#include <cuda_fp16.h>
 using  uint = unsigned int;
 
 template <typename T>

@@ -29,6 +29,7 @@ namespace CXE {
 
 		uint _size;
 		DeviceHostVector<bvhNodeV1> _nodes;
+		DeviceHostVector<ulonglong2> _quantilizedNodes;
 	};
 	
 }

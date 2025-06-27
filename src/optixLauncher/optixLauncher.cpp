@@ -242,8 +242,10 @@ void OptixLauncher::init()
 	}
 	
 	m_missProgGroup = createMissProgramGroup();
-	if (m_type) // AABB primitive
+	if (m_type == 1) // AABB primitive
 		m_obstacleHitgroupProgGroup = createAABBHitgroupProgramGroup(true, "__anyhit__ch", "__intersection__is");//
+	else if (m_type == 2) // AABB primitive
+		m_obstacleHitgroupProgGroup = createAABBHitgroupProgramGroup(true, "__anyhit__ch", "__intersection__pointAABB");
 	else // triangle primitive
 		m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(true,"__anyhit__ch");
 	//m_obstacleHitgroupProgGroup = createHitgroupProgramGroup(false, "__closesthit__ch");
@@ -252,7 +254,6 @@ void OptixLauncher::init()
 	setupShaderBindingTable(m_obstacleSbt, m_particleSphereRadius, m_obstacleHitgroupProgGroup);
 
 	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&m_gpuParams), sizeof(Params)));
-	CUDA_CHECK(cudaMalloc((void**)&m_gpuHitResults, sizeof(HitResult)*100));
 }
 
 
@@ -578,6 +579,8 @@ void OptixLauncher::buildAABBGeometryFromPoint(OptixAABBLauncherInfo& info,
 	const size_t AABBSizeInBytes = info.numAABB * sizeof(AABB);
 	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.AABBBuffer), AABBSizeInBytes));
 
+	m_cpuParams.thickness = thickness;
+
 	setAABBBufferFromPoints((AABB*)info.AABBBuffer,
 		gpuPointBuffer,
 		thickness,
@@ -641,7 +644,7 @@ void OptixLauncher::buildAABBGeometryWithGPUData(OptixAABBLauncherInfo& info,
 
 	// build GAS
 	OptixAccelBuildOptions accel_options = {};
-	accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION | OPTIX_BUILD_FLAG_ALLOW_UPDATE ;
+	accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION | OPTIX_BUILD_FLAG_ALLOW_UPDATE | OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
 	accel_options.motionOptions.numKeys = 1;
 	accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
 
@@ -700,14 +703,16 @@ void OptixLauncher::launchForEdge(void* gpuVerts, void* edges, const uint numEdg
 
 
 	if ((m_cpuParams.vertexs != gpuVerts) ||
-		(m_cpuParams.edgeIndex != edges) ||
-		(m_cpuParams.hitResults != m_gpuHitResults) ||
+		(m_cdIndex.GetSize() == 0) ||
+		(m_cdBuffer.GetSize() == 0) ||
 		(m_cpuParams.handle != m_obstacleGASHandle))
 	{
+		m_cdIndex.Allocate(numEdges);
+		m_cdBuffer.Allocate(numEdges * MAX_CD_NUM_PER_VERT);
 		m_cpuParams.vertexs = (float3*)gpuVerts;
 		m_cpuParams.edgeIndex = (int2*)edges;
-		m_cpuParams.hitResults = m_gpuHitResults;
-		m_cpuParams.handle = m_obstacleGASHandle;
+		m_cpuParams.cdIndex = (int*)m_cdIndex.GetDevice();
+		m_cpuParams.cdBuffer = (int*)m_cdBuffer.GetDevice();
 		CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(m_gpuParams), &m_cpuParams, sizeof(Params), cudaMemcpyHostToDevice));
 	}
 	OPTIX_CHECK(optixLaunch(m_obstaclePipeline, 0, m_gpuParams, sizeof(Params), &m_obstacleSbt, numEdges, 1, 1));
@@ -716,14 +721,19 @@ void OptixLauncher::launchForEdge(void* gpuVerts, void* edges, const uint numEdg
 void OptixLauncher::launchForVert(void* gpuVerts, const uint numVerts) {
 
 	if ((m_cpuParams.vertexs != gpuVerts) ||
-		(m_cpuParams.hitResults != m_gpuHitResults) ||
+		(m_cdIndex.GetSize() == 0 )||
+		(m_cdBuffer.GetSize() == 0) ||
 		(m_cpuParams.handle != m_obstacleGASHandle))
 	{
+		m_cdIndex.Allocate(numVerts);
+		m_cdBuffer.Allocate(numVerts * MAX_CD_NUM_PER_VERT);
 		m_cpuParams.vertexs = (float3*)gpuVerts;
-		m_cpuParams.hitResults = m_gpuHitResults;
 		m_cpuParams.handle = m_obstacleGASHandle;
+		m_cpuParams.cdIndex = (int*)m_cdIndex.GetDevice();
+		m_cpuParams.cdBuffer = (int*)m_cdBuffer.GetDevice();
 		CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(m_gpuParams), &m_cpuParams, sizeof(Params), cudaMemcpyHostToDevice));
 	}
+	m_cdIndex.SetDeviceZero();
 	OPTIX_CHECK(optixLaunch(m_obstaclePipeline, 0, m_gpuParams, sizeof(Params), &m_obstacleSbt, numVerts, 1, 1));
 }
 

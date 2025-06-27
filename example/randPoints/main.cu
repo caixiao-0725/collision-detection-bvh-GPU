@@ -7,9 +7,10 @@
 #include "atomicFunctions.cuh"
 #include "lbvh.h"
 
+
 using namespace CXE;
 
-
+//#include "BvhUtils.cuh"
 int main() {
     const int N =  100000;
     const float R = 0.001f;
@@ -25,10 +26,27 @@ int main() {
             points.x + R, points.y + R, points.z + R);
     }
 
-    aabbs.ReadToDevice();
+    //float temp = 0.194304f;
+    //uint a = *reinterpret_cast<uint*>(&temp);
+    //
+    //for (int bit = 31;bit >= 0;bit--) {
+	//	printf("%d", (a>>bit)&1);
+    //}
+    //
+    //printf("\n");
+    //
+	//a &= 0x7F800000; // Clear the sign bit
+	//a |= 0x00002000; // Set the exponent to 1
+    //for (int bit = 31;bit >= 0;bit--) {
+    //    printf("%d", (a >> bit) & 1);
+    //}
+    //
+    //temp = *reinterpret_cast<float*>(&a);
+	//printf("\nCleared sign bit: %.10f\n", temp);
 
+    aabbs.ReadToDevice();
     Bvh A;
-    A._type = 4;
+    A._type = 6;
     A.setup(N, N, N - 1);
     A.build(aabbs.GetDevice());
     A.query(aabbs.GetDevice(), aabbs.GetSize(),true);

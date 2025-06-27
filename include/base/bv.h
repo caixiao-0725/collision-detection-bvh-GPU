@@ -2,6 +2,9 @@
 #define __BV_H_
 
 #include "origin.h"
+
+#define MAX_CD_NUM_PER_VERT 64
+
 class AABB {
 public:
     vec3f _min, _max;
@@ -81,6 +84,28 @@ public:
     }
 };
 
+class AABBhalf {
+public:
+    __half2 x, y, z;
+
+    __host__ __device__  bool overlaps(const AABB& b) const {
+        float2 data;
+		data = __half22float2(x);
+		if (b._min.x > data.y || b._max.x < data.x) return false;
+		data = __half22float2(y);
+		if (b._min.y > data.y || b._max.y < data.x) return false;
+		data = __half22float2(z);
+		if (b._min.z > data.y || b._max.z < data.x) return false;
+		return true;
+    }
+};
+
+struct __align__(16) qNode {
+    int lc;
+    AABBhalf bound; // 8 bytes
+};
+
+
 
 struct __align__(32) bvhNodeV2 {
     int rangex;
@@ -102,6 +127,12 @@ struct __align__(64) bvhNode {
 
     AABB bounds[2];
 };
+typedef unsigned long long int ullint;
+
+
+
+
+
 
 
 using BOX = AABB;

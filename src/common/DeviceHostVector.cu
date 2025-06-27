@@ -66,6 +66,7 @@ namespace CXE
 	template class DeviceHostVector<double3>;
 	template class DeviceHostVector<double4>;
 
+
     template class DeviceHostVector<vec4f>;
     template class DeviceHostVector<vec3f>;
     template class DeviceHostVector<vec3u>;
@@ -74,6 +75,7 @@ namespace CXE
     template class DeviceHostVector<vec2i>;
     template class DeviceHostVector<AABB>;
     template class DeviceHostVector<bvhNode>;
+	template class DeviceHostVector<qNode>;
     template class DeviceHostVector<bvhNodeV1>;
     template class DeviceHostVector<bvhNodeV2>;
     //template class DeviceHostVector<Utils::CollsionPair>;
@@ -161,5 +163,10 @@ namespace CXE
     void DeviceHostVector<T>::ReadToHost() const
     {
         checkCudaErrors(cudaMemcpy((void*)hostVector.data(), ptr, size * sizeof(T), cudaMemcpyDeviceToHost));
+    }
+
+    template <typename T>
+    void DeviceHostVector<T>::SetDeviceZero() const {
+        checkCudaErrors(cudaMemset(ptr, 0, size * sizeof(T)));
     }
 }

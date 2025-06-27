@@ -8,3 +8,5 @@ add_library(${NAME} ${embedded_ptx_code}
 	optixLauncher.cu
 	edgeTriangles.h
 )
+
+target_link_libraries(${NAME} Vector)

@@ -355,6 +355,45 @@ namespace CXE {
 			_primBox[newIdx] = bv;
 		}
 
+		__device__ __host__ __forceinline__ void UnzipQuantilizedNode(ulonglong2& qaabb, bvhNodeV1& aabb, vec3f& origin, vec3f& delta) {
+
+			ullint temp = (qaabb.x >> 45) & 0x7FFFF;
+			if (temp == 0x7FFFF) {
+				aabb.lc = -1;
+			}
+			else {
+			aabb.lc = static_cast<int>(temp);
+			}
+
+			temp = (qaabb.x >> 26) & 0x7FFFF;
+			if (temp == 0x7FFFF) {
+				aabb.escape = -1;
+			}
+			else {
+				aabb.escape = static_cast<int>(temp);
+			}
+			aabb.bound._min.x = origin.x + static_cast<float>((qaabb.x >> 11) & 0x7FFF) * delta.x;
+			temp = (qaabb.x & 0x7FF) << 4;
+			temp |= (qaabb.y >> 60);
+			aabb.bound._min.y = origin.y + static_cast<float>(temp) * delta.y;
+			aabb.bound._min.z = origin.z + static_cast<float>((qaabb.y >> 45) & 0x7FFF) * delta.z;
+			aabb.bound._max.x = origin.x + static_cast<float>((qaabb.y >> 30) & 0x7FFF) * delta.x;
+			aabb.bound._max.y = origin.y + static_cast<float>((qaabb.y >> 15) & 0x7FFF) * delta.y;
+			aabb.bound._max.z = origin.z + static_cast<float>(qaabb.y & 0x7FFF) * delta.z;
+		}
+
+		__global__ void Unzip(bvhNodeV1* node, ulonglong2* qNode,AABB* scene, int num) {
+			const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= num) return;
+			vec3f origin = scene[0]._min;
+			vec3f delta = scene[0]._max;
+			ulonglong2 qaabb = qNode[idx];
+			/*if (idx == 18) {
+				printf("%f  %f  %f\n", origin.x, delta.x, static_cast<float>((qaabb.y >> 30) & 0x7FFF));
+			}*/
+			UnzipQuantilizedNode(qaabb, node[idx], origin, delta);
+		}
+
 
 		__global__ void buildIntNodes(int size, uint* _depths,
 			int* _lvs_lca,int* _lvs_metric,uint* _lvs_par,uint* _lvs_mark, BOX* _lvs_box,
@@ -510,6 +549,153 @@ namespace CXE {
 				internalEscape >>= 1;
 				internalNode.escape = internalEscape + (bLeaf ? intSize : 0);
 			}
+			_nodes[newId] = internalNode;
+		}
+
+
+		__device__ __host__ __forceinline__ void quantilizeAABB(ulonglong2& qaabb, AABB& aabb, vec3f& origin, vec3f& delta) {			
+			//ullint a = 0;
+			//printf("%llu  %llu  %llu  %f\n", static_cast<ullint>((aabb._min.x - origin.x) / delta.x) << 11, qaabb.x,(qaabb.x | 1), (aabb._min.x - origin.x) / delta.x);
+
+			qaabb.x |= static_cast<ullint>((aabb._min.x - origin.x) / delta.x) << 11;
+			ullint temp = static_cast<ullint>((aabb._min.y - origin.y) / delta.y);
+			qaabb.x |= temp >> 4;
+			qaabb.y |= temp << 60;
+
+			qaabb.y |= static_cast<ullint>((aabb._min.z - origin.z) / delta.z) << 45;
+			qaabb.y |= static_cast<ullint>(ceilf((aabb._max.x - origin.x) / delta.x)) << 30;
+			qaabb.y |= static_cast<ullint>(ceilf((aabb._max.y - origin.y) / delta.y)) << 15;
+			qaabb.y |= static_cast<ullint>(ceilf((aabb._max.z - origin.z) / delta.z));
+			//printf("%f  %llu\n", (aabb._max.z - origin.z) / delta.z,static_cast<ullint>((aabb._min.x - origin.x) / delta.x));
+			
+		}
+
+		__global__ void reorderQuantilizedNode(int intSize, const int* _tkMap, int* _lvs_lca, AABB* _lvs_box,
+			int* _unorderedTks_lc, uint* _unorderedTks_mark, int* _unorderedTks_rangey, AABB* _unorderedTks_box,
+			AABB* _scene_box,ulonglong2* _nodes
+		) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= intSize + 1) return;
+			vec3f origin = _scene_box[0]._min;
+			vec3f delta = _scene_box[0]._max - origin;
+			delta /= ((1 << 15) - 1);
+			if (idx == 0) {
+				_scene_box[0]._max = delta;
+			}
+			
+			__syncthreads();
+
+			ulonglong2 node;
+			node.x = 0;
+			node.y = 0;
+			node.x |= ((ullint)0x7FFFF << 45);
+			int escape = _lvs_lca[idx + 1];
+			
+			if (escape == -1) {
+				node.x |= (ullint)0x7FFFF << 26;
+			}
+			else {
+				int bLeaf = escape & 1;
+				escape >>= 1;
+				escape += (bLeaf ? intSize : 0);
+				node.x |= static_cast<ullint>(escape) << 26;
+			}
+			quantilizeAABB(node, _lvs_box[idx], origin, delta);
+			//printf("%llu  %llu\n", node.x,node.y);
+
+			_nodes[idx + intSize] = node;
+
+			if (idx >= intSize) return;
+
+			ulonglong2 internalNode{0,0};
+			//internalNode.x = 0;
+			//internalNode.y = 0;
+			int newId = _tkMap[idx];
+			uint mark = _unorderedTks_mark[idx];
+
+			int lc = mark & 1 ? _unorderedTks_lc[idx] + intSize : _tkMap[_unorderedTks_lc[idx]];
+			internalNode.x |= ((ullint)lc << 45);
+
+			quantilizeAABB(internalNode, _unorderedTks_box[idx], origin, delta);
+
+			int internalEscape = _lvs_lca[_unorderedTks_rangey[idx] + 1];
+
+			if (internalEscape == -1) {
+				internalNode.x |= (ullint)0x7FFFF << 26;
+			}
+			else {
+				int bLeaf = internalEscape & 1;
+				internalEscape >>= 1;
+				internalEscape += (bLeaf ? intSize : 0);
+				internalNode.x |= static_cast<ullint>(internalEscape) << 26;
+			}
+			_nodes[newId] = internalNode;
+		}
+
+		__device__ __host__ __forceinline__ void AABB2AABBhalf(AABB& aabb,AABBhalf& aabb_half) {
+
+			aabb_half.x.x = __float2half_rd(aabb._min.x);
+			aabb_half.x.y = __float2half_ru(aabb._max.x);
+			aabb_half.y.x = __float2half_rd(aabb._min.y);
+			aabb_half.y.y = __float2half_ru(aabb._max.y);
+			aabb_half.z.x = __float2half_rd(aabb._min.z);
+			aabb_half.z.y = __float2half_ru(aabb._max.z);
+			//AABB temp;
+			//temp._min.x = __half2float(aabb_half.x.x);
+			//temp._max.x = __half2float(aabb_half.x.y);
+			//temp._min.y = __half2float(aabb_half.y.x);
+			//temp._max.y = __half2float(aabb_half.y.y);
+			//temp._min.z = __half2float(aabb_half.z.x);
+			//temp._max.z = __half2float(aabb_half.z.y);
+			//
+			//printf("min: %f %f %f  max: %f %f %f\n", aabb._min.x, aabb._min.y, aabb._min.z, aabb._max.x, aabb._max.y, aabb._max.z);
+			//printf("min: %f %f %f  max: %f %f %f\n", temp._min.x, temp._min.y, temp._min.z, temp._max.x, temp._max.y, temp._max.z);
+
+			return;
+		}
+
+		__global__ void reorderQNodeV1(int intSize, const int* _tkMap, int* _lvs_lca, AABB* _lvs_box,
+			int* _unorderedTks_lc, uint* _unorderedTks_mark, int* _unorderedTks_rangey, AABB* _unorderedTks_box,
+			int* _escape ,qNode* _nodes
+		) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= intSize + 1) return;
+
+			int escape = _lvs_lca[idx + 1];
+
+			if (escape != -1) 
+			{
+				int bLeaf = escape & 1;
+				escape >>= 1;
+				escape += (bLeaf ? intSize : 0);
+			}
+			_escape[idx + intSize] = escape;
+
+			qNode node;
+			node.lc = -1;
+
+			AABB2AABBhalf(_lvs_box[idx], node.bound);
+
+			_nodes[idx + intSize] = node;
+
+			if (idx >= intSize) return;
+			
+			int newId = _tkMap[idx];
+			
+			int internalEscape = _lvs_lca[_unorderedTks_rangey[idx] + 1];
+			
+			if (internalEscape != -1) {
+				int bLeaf = internalEscape & 1;
+				internalEscape >>= 1;
+				internalEscape += (bLeaf ? intSize : 0);
+			}
+			_escape[newId] = internalEscape;
+			
+			qNode internalNode;
+			
+			internalNode.lc = _unorderedTks_mark[idx] & 1 ? _unorderedTks_lc[idx] + intSize : _tkMap[_unorderedTks_lc[idx]];
+			AABB2AABBhalf(_unorderedTks_box[idx], internalNode.bound);
+			
 			_nodes[newId] = internalNode;
 		}
 
@@ -673,6 +859,94 @@ namespace CXE {
 							count++;
 						}
 					
+						st = node.escape;
+					}
+					else {
+						st = node.lc;
+					}
+				}
+				else {
+					st = node.escape;
+				}
+			} while (st != -1);
+			_cpNum[idx] = count;
+		}
+
+		template<bool SELF>
+		__global__ void qNodeCD(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const int* _escape,const qNode* _nodes,
+			int* _cpNum, int* _cpRes) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= Size) return;
+			qNode node;
+			int escape;
+			int st = 0;
+			int count = 0;
+			const BOX bv = _box[idx];
+			do {
+				node = _nodes[st];
+				escape = _escape[st];
+				if (node.bound.overlaps(bv)) {
+					if (node.lc == -1) {
+						int temp_idx = _lvs_idx[st - intSize];
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
+						}
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+
+						st = escape;
+					}
+					else {
+						st = node.lc;
+					}
+				}
+				else {
+					st = escape;
+				}
+			} while (st != -1);
+			_cpNum[idx] = count;
+		}
+		
+
+		template<bool SELF>
+		__global__ void quantilizedStacklessCD(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const AABB* scene,const ulonglong2* _nodes,
+			int* _cpNum, int* _cpRes) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= Size) return;
+			vec3f origin = scene[0]._min;
+			vec3f delta = scene[0]._max;
+
+			bvhNodeV1 node;
+			ulonglong2 qNode;
+			int st = 0;
+			int count = 0;
+			const BOX bv = _box[idx];
+			do {
+				qNode = _nodes[st];
+				UnzipQuantilizedNode(qNode, node, origin, delta);
+				if (node.bound.overlaps(bv)) {
+					if (node.lc == -1) {
+						int temp_idx = _lvs_idx[st - intSize];
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
+						}
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+
 						st = node.escape;
 					}
 					else {

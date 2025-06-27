@@ -97,6 +97,8 @@ namespace CXE
 		// Copy device to host memory
 		void ReadToHost() const;
 
+		void SetDeviceZero() const;
+
 		void SyncHostSize() { size = hostVector.size(); }
 	};
 }

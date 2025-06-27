@@ -7,6 +7,7 @@
 #include "edgeTriangles.h"
 #include "origin.h"
 #include "bv.h"
+#include "DeviceHostVector.h"
 
 typedef unsigned int uint;
 #define OPTIX_CHECK(call)                                                 \
@@ -196,7 +197,8 @@ public:
 
 	float m_particleSphereRadius = 0.001f;
 
-	HitResult* m_gpuHitResults;
+	CXE::DeviceHostVector<int> m_cdIndex;
+	CXE::DeviceHostVector<int> m_cdBuffer;
 
 	int m_type = 2; // 0.edge - triangle primitive    1. edge - aabb primitive   2. point - aabb primitive
 };

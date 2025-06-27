@@ -12,7 +12,7 @@
 #include "CudaThrustUtils.hpp"
 #include "DeviceHostVector.h"
 
-#define MAX_CD_NUM_PER_VERT 64
+
 
 namespace CXE {
 
@@ -44,6 +44,8 @@ namespace CXE {
 		MergeNodeArray _mergeNodes;
 		StacklessMergeNodeArray _stacklessMergeNodes;
 		StacklessMergeNodeV1Array _stacklessMergeNodesV1;
+		DeviceHostVector<qNode> _qNodes; ///< quantilized nodes for faster query
+		DeviceHostVector<int> _escape; ///< quantilized boxes for faster query
 
 		BOX* _bv;
 
@@ -67,6 +69,7 @@ namespace CXE {
 						// 2. AOS stack 32 query      bottom to top tree build
 						// 3. AOS stackless query     bottom to top tree build
 						// 4. faster AOS stackless query     bottom to top tree build
+						// 5. quantilized AOS stackless query     bottom to top tree build
 						// 11.AOS stack 32 query      binary search tree build
 						// 12.AOS stack 32 query      binary search tree build    sort query elements
 	};

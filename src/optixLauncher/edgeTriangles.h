@@ -4,11 +4,6 @@
 #include "optix_types.h"
 #include <cuda_runtime.h>
 #include "bv.h"
-__align__(8) struct HitResult
-{
-    int edgeIndex;
-    int faceIndex;
-};
 
 struct Params
 {
@@ -16,9 +11,9 @@ struct Params
 	const int2* edgeIndex;
 	const vec3f* vertexBuffer;
 	const vec3i* indexBuffer;
-	//const int* cdIndex;
-	//const int* cdBuffer;
-    HitResult* hitResults;
+	float thickness;
+	int* cdIndex;
+	int* cdBuffer;
     OptixTraversableHandle handle;
 };
 
