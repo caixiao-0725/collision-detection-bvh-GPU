@@ -46,6 +46,7 @@ namespace CXE {
 		StacklessMergeNodeV1Array _stacklessMergeNodesV1;
 		DeviceHostVector<qNode> _qNodes; ///< quantilized nodes for faster query
 		DeviceHostVector<int> _escape; ///< quantilized boxes for faster query
+		AABBhalf* _queryAABB;
 
 		BOX* _bv;
 

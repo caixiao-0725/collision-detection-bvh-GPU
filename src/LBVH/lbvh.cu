@@ -45,6 +45,10 @@ void Bvh::setup(int prim_size, int ext_node_size, int int_node_size) {
 		_intNodes.setup(_intSize);
 		_stacklessMergeNodesV1.setup(2 * _intSize + 1);
 		break;
+	case 8:
+		_intNodes.setup(_intSize);
+		_stacklessMergeNodesV1.setup(2 * _intSize + 1);
+		break;
 	case 11:
 		_mergeNodes.setup(_intSize);
 		break;
@@ -143,6 +147,13 @@ void Bvh::reorderIntNodes() {
 		_stacklessMergeNodesV1._quantilizedNodes);
 		
 		break;
+	case 8:
+		BvhUtils::reorderUllintNodeV1 << <gridDim, blockDim >> > (intSize(), d_tkMap, lvs()._lca, lvs()._box,
+			untks()._lc, untks()._mark, untks()._rangey, untks()._box,
+			_stacklessMergeNodesV1._quantilizedNodes);
+
+		break;
+
 	default:
 		break;
 	}
@@ -239,15 +250,21 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 			break;
 
 		case 6:
-			//BvhUtils::reorderQNodeV1<true> << <gridDim, blockDim >> >
 			BvhUtils::qNodeCD<true> << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
 				_escape, _qNodes,
 				_cpNumPerVert, _cpResPerVert
 				);
 			break;
 		case 7:
-			//BvhUtils::ll2AABB << <gridDim, blockDim >> > (_stacklessMergeNodesV1._quantilizedNodes, 10);
 			BvhUtils::UllintCD<true> <<<gridDim, blockDim >>> (num, boxs, intSize(), lvs()._idx,
+				_stacklessMergeNodesV1._quantilizedNodes,
+				_cpNumPerVert, _cpResPerVert
+				);
+			break;
+		case 8:
+			cudaMalloc((void**)(&_queryAABB), sizeof(AABBhalf) * num);
+			BvhUtils::AABB2half << <gridDim, blockDim >> > (boxs, _queryAABB, num);
+			BvhUtils::UllintCDV1<true> << <gridDim, blockDim >> > (num, _queryAABB, intSize(), lvs()._idx,
 				_stacklessMergeNodesV1._quantilizedNodes,
 				_cpNumPerVert, _cpResPerVert
 				);
