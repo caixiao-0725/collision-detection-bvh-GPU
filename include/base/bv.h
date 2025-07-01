@@ -106,6 +106,25 @@ struct qNode {
     AABBhalf bound; // 8 bytes
 };
 
+struct intAABB{
+    vec3i _min, _max;
+    __host__ __device__ __forceinline__ void convertFrom(const AABB& other,vec3f& origin,vec3f& delta) {
+        _min.x = static_cast<int>((other._min.x - origin.x) / delta.x);
+		_min.y = static_cast<int>((other._min.y - origin.y) / delta.y);
+		_min.z = static_cast<int>((other._min.z - origin.z) / delta.z);
+		_max.x = static_cast<int>(ceilf((other._max.x - origin.x) / delta.x));
+		_max.y = static_cast<int>(ceilf((other._max.y - origin.y) / delta.y));
+		_max.z = static_cast<int>(ceilf((other._max.z - origin.z) / delta.z));
+        //printf("%f  %f  %f\n", origin.x, origin.y, origin.z);
+		//printf("%f  %f  %f\n", delta.x, delta.y, delta.z);
+		//printf("%d  %d  %d\n", _min.x, _min.y, _min.z);
+		//printf("%d  %d  %d\n", _max.x, _max.y, _max.z);
+		//printf("%f  %f  %f\n", other._min.x - origin.x, other._min.y - origin.y, other._min.z - origin.z);
+        //printf("%f  %f  %f\n", other._max.x - origin.x, other._max.y - origin.y, other._max.z - origin.z);
+        //printf("%f  %f  %f\n", ceilf((other._max.x - origin.x) / delta.x), ceilf((other._max.y - origin.y) / delta.y), ceilf((other._max.z - origin.z) / delta.z));
+    }
+
+};
 
 
 struct __align__(32) bvhNodeV2 {

@@ -167,7 +167,10 @@ void Bvh::build(const AABB* boxs) {
 	int blockDim = K_THREADS;
 	int gridDim = (_primSize + blockDim - 1) / blockDim;
 
+	cudaMemcpy(d_bv.GetDevice(), boxs, sizeof(AABB), cudaMemcpyDeviceToDevice);
+	//d_bv.ReadToHost();
 	BvhUtils::calcMaxBVFromBox << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, boxs, d_bv);
+	d_bv.ReadToHost();
 	BvhUtils::calcMCsFromBox << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, boxs, d_bv, lvs()._mtcode);
 
 	checkThrustErrors(thrust::sequence(thrust::device, d_vals.GetDevice(), d_vals.GetDevice() + d_vals.GetSize()));
@@ -232,6 +235,7 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 				);
 			break;
 		case 4:
+			//_stacklessMergeNodesV1._nodes.ReadToHost();
 			BvhUtils::AosBvhStacklessCDV1<true> << <gridDim, blockDim >> > (num, boxs, intSize(),lvs()._idx,
 				_stacklessMergeNodesV1._nodes,
 				_cpNumPerVert, _cpResPerVert
@@ -246,7 +250,6 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 				d_bv, _stacklessMergeNodesV1._quantilizedNodes,
 				_cpNumPerVert, _cpResPerVert
 				);
-
 			break;
 
 		case 6:
@@ -333,11 +336,10 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 		}
 	}
 	_cpNumPerVert.ReadToHost();
+	_cpResPerVert.ReadToHost();
 	int sum = 0;
 	for (int i = 0; i < num; ++i) {
 		sum += _cpNumPerVert.GetHost()[i];
 	}
-	
-
 	printf("%d\n", sum);
 }
