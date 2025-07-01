@@ -4,7 +4,7 @@
 #include "../../include/base/bv.h"
 #include "DeviceHostVector.h"
 
-namespace CXE {
+namespace Lczx {
 	class IntNodeArray
 	{
 	public:

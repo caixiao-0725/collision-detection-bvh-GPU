@@ -5,7 +5,7 @@
 #include "CudaThrustUtils.hpp"
 #include "device_launch_parameters.h"
 
-using namespace CXE;
+using namespace Lczx;
 
 void IntNodeArray::setup(const int intSize) {
 	_intSize = intSize;

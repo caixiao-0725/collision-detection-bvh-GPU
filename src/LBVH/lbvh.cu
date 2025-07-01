@@ -3,7 +3,7 @@
 #include "cub/cub.cuh"
  
 
-using namespace CXE;
+using namespace Lczx;
 
 int const K_THREADS = 256;
 

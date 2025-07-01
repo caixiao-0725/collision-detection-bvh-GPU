@@ -31,7 +31,7 @@ namespace fs = std::experimental::filesystem;
 namespace fs = std::filesystem;
 #endif
 
-using namespace CXE;
+using namespace Lczx;
 
 
 std::vector<BOX> load_aabb_file(const std::string& filepath) {

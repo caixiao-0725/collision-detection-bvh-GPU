@@ -7,7 +7,7 @@
 #include "atomicFunctions.cuh"
 #include "lbvh.h"
 #include <cuda_runtime.h>
-namespace CXE {
+namespace Lczx {
 	namespace BvhUtils {
 		using  uint = unsigned int;
 		int const K_THREADS = 256;

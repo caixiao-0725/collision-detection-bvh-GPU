@@ -8,7 +8,7 @@
 #include "lbvh.h"
 
 
-using namespace CXE;
+using namespace Lczx;
 
 
 

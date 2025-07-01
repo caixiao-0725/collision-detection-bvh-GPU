@@ -14,7 +14,7 @@
 
 
 
-namespace CXE {
+namespace Lczx {
 
 	class Bvh {
 	public:

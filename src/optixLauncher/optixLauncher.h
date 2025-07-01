@@ -197,8 +197,8 @@ public:
 
 	float m_particleSphereRadius = 0.001f;
 
-	CXE::DeviceHostVector<int> m_cdIndex;
-	CXE::DeviceHostVector<int> m_cdBuffer;
+	Lczx::DeviceHostVector<int> m_cdIndex;
+	Lczx::DeviceHostVector<int> m_cdBuffer;
 
 	int m_type = 2; // 0.edge - triangle primitive    1. edge - aabb primitive   2. point - aabb primitive
 };

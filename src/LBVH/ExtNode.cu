@@ -5,7 +5,7 @@
 #include "CudaThrustUtils.hpp"
 #include "device_launch_parameters.h"
 
-using namespace CXE;
+using namespace Lczx;
 
 __global__ void calcExtNodeSplitMetrics(int extsize, const uint* _codes, int* _metrics) {
 	int idx = blockDim.x * blockIdx.x + threadIdx.x;

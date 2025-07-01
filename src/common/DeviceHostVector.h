@@ -3,7 +3,7 @@
 
 #include "Common.h"
 
-namespace CXE
+namespace Lczx
 {
 	template <typename T>
 	class DeviceHostVector

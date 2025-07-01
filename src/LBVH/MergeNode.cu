@@ -1,6 +1,6 @@
 #include "MergeNode.h"
 
-namespace CXE {
+namespace Lczx {
 
 	void MergeNodeArray::setup(const int Size) {
 		_size = Size;

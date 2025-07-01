@@ -12,7 +12,7 @@
 #include "../../include/base/CudaThrustUtils.hpp"
 #include "../common/HelperMath.h"
 
-namespace CXE {
+namespace Lczx {
 	class ExtNodeArray
 	{
 	public:

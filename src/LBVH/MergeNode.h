@@ -4,7 +4,7 @@
 #include "DeviceHostVector.h"
 #include "bv.h"
 
-namespace CXE {
+namespace Lczx {
 	class MergeNodeArray {
 	public:
 		void setup(const int Size);

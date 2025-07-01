@@ -3,7 +3,7 @@
 #include "origin.h"
 #include "bv.h"
 //#include "collisionUtils.cuh"
-namespace CXE
+namespace Lczx
 {
     // Explicit Instantiation
 	template class DeviceHostVector<char>;

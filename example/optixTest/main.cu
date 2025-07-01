@@ -11,7 +11,7 @@
 #include "DeviceHostVector.h"
 #include "common.h"
 
-using namespace CXE;
+using namespace Lczx;
 
 class Mesh {
 public:
