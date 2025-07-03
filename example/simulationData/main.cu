@@ -182,7 +182,7 @@ TestResult test_frame(const std::string& dataset_name, int frame_num) {
     d_collider_aabbs.SetDeviceHost(collider_aabbs.size(), collider_aabbs.data());
     
     Bvh A;
-    A._type = 4;
+    A._type = 5;
     A.setup(mesh_aabbs.size(), mesh_aabbs.size(), mesh_aabbs.size() - 1);
 
     // Test culbvh with ground truth comparison
@@ -205,7 +205,8 @@ TestResult test_frame(const std::string& dataset_name, int frame_num) {
         // Query between collider and mesh
 
         cudaEventRecord(start);
-        A.query(d_collider_aabbs.GetDevice(), d_collider_aabbs.GetSize(),false);
+        A.query(d_mesh_aabbs.GetDevice(), d_mesh_aabbs.GetSize(), true);
+        //A.query(d_collider_aabbs.GetDevice(), d_collider_aabbs.GetSize(),false);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&result.query_time, start, stop);
@@ -241,7 +242,7 @@ TestResult test_frame(const std::string& dataset_name, int frame_num) {
 
 
 int main() {
-    test_frame("dance",50);
+    test_frame("dance",650);
     return 0;
 }
 

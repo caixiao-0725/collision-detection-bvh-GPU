@@ -15,7 +15,7 @@ namespace Lczx {
 		int const K_REDUCTION_NUM = 1 << K_REDUCTION_LAYER;
 		int const K_REDUCTION_MODULO = K_REDUCTION_NUM - 1;
 
-		int const aabbBits = 15;
+		int const aabbBits = 14;
 		int const indexBits = 64-3*aabbBits;
 		int const offset3 = aabbBits * 3;
 		int const offset2 = aabbBits * 2;
@@ -594,14 +594,9 @@ namespace Lczx {
 			vec3f delta = _scene_box[0]._max - origin;
 			//if (idx == 0) {
 			//	printf("scene x :%f  %f \n", _scene_box[0]._min.x, _scene_box[0]._min.y);
+			//	printf("de :%f  %f \n", delta.x, delta.y);
 			//}
 			delta /= ((1 << aabbBits) - 2);
-			
-			__syncthreads();
-
-			if (idx == 0) {
-				_scene_box[0]._max = delta;
-			}
 
 			ulonglong2 node{0,0};
 			quantilizeAABB(node, _lvs_box[idx], origin, delta);
@@ -631,8 +626,8 @@ namespace Lczx {
 
 			ulonglong2 internalNode{0,0};
 			//if (newId == 0) {
-				//printf("%llu  %f  %f  %f\n", static_cast<ullint>((_unorderedTks_box[idx]._max.x - origin.x) / delta.x) << offset2, _unorderedTks_box[idx]._max.x, ceilf((_unorderedTks_box[idx]._max.x - origin.x) / delta.x), (_unorderedTks_box[idx]._max.x - origin.x) / delta.x);
-				//printf("%f  %f\n", _unorderedTks_box[idx]._min.x, _unorderedTks_box[idx]._max.x);
+			//	printf("%llu  %f  %f  %f %f\n", static_cast<ullint>((_unorderedTks_box[idx]._max.x - origin.x) / delta.x) << offset2, _unorderedTks_box[idx]._max.x, ceilf((_unorderedTks_box[idx]._max.x - origin.x) / delta.x), (_unorderedTks_box[idx]._max.x - origin.x) , delta.x);
+			//	printf("%f  %f\n", _unorderedTks_box[idx]._min.x, _unorderedTks_box[idx]._max.x);
 			//}
 			quantilizeAABB(internalNode, _unorderedTks_box[idx], origin, delta);
 			//internalNode.x &= 0x00001FFFFFFFFFFF; // clear the escape bits
@@ -655,6 +650,9 @@ namespace Lczx {
 			}
 			
 			_nodes[newId] = internalNode;
+			if (idx == intSize-1) {
+				_scene_box[0]._max = delta;
+			}
 		}
 
 		__device__ __host__ __forceinline__ void AABB2AABBhalf(const AABB& aabb,AABBhalf& aabb_half) {
@@ -1067,6 +1065,7 @@ namespace Lczx {
 			int* _cpNum, int* _cpRes) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= Size) return;
+			idx = _lvs_idx[idx];
 			bvhNodeV1 node;
 			int st = 0;
 			int count = 0;
@@ -1341,6 +1340,7 @@ namespace Lczx {
 			int* _cpNum, int* _cpRes) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= Size) return;
+			idx = _lvs_idx[idx];
 			vec3f origin = scene[0]._min;
 			vec3f delta = scene[0]._max;
 			const AABB bv_ = _box[idx];
@@ -1355,7 +1355,6 @@ namespace Lczx {
 				node = _nodes[st];
 				lc = node.x >> offset3;
 				escape = node.y >> offset3;
-
 				if (overlapsLonglong2int(node,bv)) {
 					if (lc == MaxIndex) {
 						int temp_idx = _lvs_idx[st - intSize];
@@ -1503,7 +1502,8 @@ namespace Lczx {
 			int* _cpNum, int* _cpRes) {
 			int idx = threadIdx.x + blockIdx.x * blockDim.x;
 			if (idx >= travPrimSize) return;
-			const BOX bv = _box[_lvs_idx[idx]];
+			idx = _lvs_idx[idx];
+			const BOX bv = _box[idx];
 			int count = 0;
 
 			int stack[32];			// This is dynamically sized through templating
