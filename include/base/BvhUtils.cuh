@@ -1381,6 +1381,181 @@ namespace Lczx {
 			} while (st != MaxIndex);
 			_cpNum[idx] = count;
 		}
+#define MAX_RES_PER_BLOCK 1024
+		__global__ void quantilizedStacklessCDShared(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const AABB* scene, const ulonglong2* _nodes,
+			int* resCounter, vec2i* res,const int maxRes) {
+			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			bool active = tid < Size;
+			vec3f origin = scene[0]._min;
+			vec3f delta = scene[0]._max;
+			int idx;
+			intAABB bv;
+			if (active) {
+				idx = _lvs_idx[tid];
+				bv.convertFrom(_box[idx], origin, delta);
+			}
+
+			__shared__ vec2i sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ int sharedCounter;		// How many results are cached in shared memory
+			__shared__ int sharedGlobalIdx;		// Where to write in global memory
+			if (threadIdx.x == 0)
+				sharedCounter = 0;
+
+			ulonglong2 node;
+			int st = 0;
+			uint lc;
+			uint escape;
+			while (true) {
+				__syncthreads();
+				if (active) {
+					while (st != MaxIndex) 
+					{				
+						node = _nodes[st];
+						lc = node.x >> offset3;
+						escape = node.y >> offset3;
+						if (overlapsLonglong2int(node, bv)) {
+							if (lc == MaxIndex) {
+								if (tid < st - intSize) {
+									int sIdx = atomicAdd(&sharedCounter, 1);
+									if (sIdx >= MAX_RES_PER_BLOCK) {
+										break;
+									}
+
+									sharedRes[sIdx] = vec2i(idx, _lvs_idx[st - intSize]);
+
+								}
+								st = escape;
+							}
+							else {
+								st = lc;
+							}
+						}
+						else {
+							st = escape;
+						}
+					} 
+				}
+				// Flush whatever we have
+				__syncthreads();
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
+				
+				if (threadIdx.x == 0){
+					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
+				}
+				
+				__syncthreads();
+				
+				// Make sure we dont write out of bounds
+				const int globalIdx = sharedGlobalIdx;
+				
+				//if (globalIdx >= maxRes || !totalRes) return;	// Out of memory for results.
+				if (threadIdx.x == 0) sharedCounter = 0;
+				//
+				//// If we got here with a half full buffer, we are done.
+				bool done = totalRes < MAX_RES_PER_BLOCK;
+				// If we are about to run out of memory, we are done.
+				//if (totalRes > maxRes - globalIdx) {
+				//	totalRes = maxRes - globalIdx;
+				//	done = true;
+				//}
+				
+				// Copy full blocks
+				int fullBlocks = (totalRes - 1) / (int)blockDim.x;
+				for (int i = 0; i < fullBlocks; i++) {
+					int offset = i * blockDim.x + threadIdx.x;
+					res[globalIdx + offset] = sharedRes[offset];
+				}
+				
+				// Copy the rest
+				int offset = fullBlocks * blockDim.x + threadIdx.x;
+				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
+				
+				// Break if every thread is done.
+				if (done) break;
+			}
+		}
+
+
+		__global__ void list2Vector(uint Size, int* _cpNum, int* _cpRes,
+			int* resCounter, vec2i* res, const int maxRes) {
+			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			bool active = tid < Size;
+			int num ;
+			int idx = 0;
+			if (active) {
+				num = _cpNum[tid];
+			}
+			__shared__ vec2i sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ int sharedCounter;		// How many results are cached in shared memory
+			__shared__ int sharedGlobalIdx;		// Where to write in global memory
+			if (threadIdx.x == 0)
+				sharedCounter = 0;
+
+			int temp_idx;
+			bool readed = false;
+
+			while (true) {
+				__syncthreads();
+				if (active) {
+					while (idx < num) {
+						if (readed == false) {
+							temp_idx = _cpRes[idx + tid * MAX_CD_NUM_PER_VERT];
+						}
+						else {
+							readed = false;
+						}
+						
+						int sIdx = atomicAdd(&sharedCounter, 1);
+						if (sIdx >= MAX_RES_PER_BLOCK) {
+							readed = true;
+							break;
+						}
+						sharedRes[sIdx] = vec2i(tid, temp_idx);	
+						idx++;
+					}
+				}
+				// Flush whatever we have
+				__syncthreads();
+				//if (threadIdx.x == 0)
+				//	printf("%d  %d", blockIdx.x, sharedCounter);
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
+
+				if (threadIdx.x == 0)
+					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
+
+				__syncthreads();
+
+				// Make sure we dont write out of bounds
+				const int globalIdx = sharedGlobalIdx;
+
+				if (globalIdx >= maxRes || !totalRes) return;	// Out of memory for results.
+				if (threadIdx.x == 0) sharedCounter = 0;
+
+				// If we got here with a half full buffer, we are done.
+				bool done = totalRes < MAX_RES_PER_BLOCK;
+				// If we are about to run out of memory, we are done.
+				if (totalRes > maxRes - globalIdx) {
+					totalRes = maxRes - globalIdx;
+					done = true;
+				}
+
+				// Copy full blocks
+				int fullBlocks = (totalRes - 1) / (int)blockDim.x;
+				for (int i = 0; i < fullBlocks; i++) {
+					int offset = i * blockDim.x + threadIdx.x;
+					res[globalIdx + offset] = sharedRes[offset];
+				}
+
+				// Copy the rest
+				int offset = fullBlocks * blockDim.x + threadIdx.x;
+				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
+
+				// Break if every thread is done.
+				if (done) break;
+			}
+		}
 
 		template<bool SELF>
 		__global__ void pureBvhStackCD(uint travPrimSize, const BOX* _box,

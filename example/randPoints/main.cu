@@ -13,7 +13,7 @@ using namespace Lczx;
 
 
 int main() {
-    const int N =  1000000;
+    const int N =  100000;
     const float R = 0.001f;
 
     printf("Generating Data...\n");

@@ -168,9 +168,9 @@ void Bvh::build(const AABB* boxs) {
 	int gridDim = (_primSize + blockDim - 1) / blockDim;
 
 	cudaMemcpy(d_bv.GetDevice(), boxs, sizeof(AABB), cudaMemcpyDeviceToDevice);
-	//d_bv.ReadToHost();
+
 	BvhUtils::calcMaxBVFromBox << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, boxs, d_bv);
-	d_bv.ReadToHost();
+
 	BvhUtils::calcMCsFromBox << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, boxs, d_bv, lvs()._mtcode);
 
 	checkThrustErrors(thrust::sequence(thrust::device, d_vals.GetDevice(), d_vals.GetDevice() + d_vals.GetSize()));
@@ -203,10 +203,13 @@ void Bvh::build(const AABB* boxs) {
 void Bvh::query(const AABB* boxs, const uint num,bool self) {
 	int blockDim = K_THREADS;
 	int gridDim = (num + blockDim - 1) / blockDim;
-	
+	const int maxResSize = 2000000;
+
 	if (_cpNumPerVert.GetSize()< num) {
 		_cpNumPerVert.Allocate(num);
 		_cpResPerVert.Allocate(num* MAX_CD_NUM_PER_VERT);
+		_resCounter.Allocate(1);
+		_res.Allocate(maxResSize);
 	}
 	if (self) {
 		switch (_type)
@@ -242,14 +245,16 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 				);
 			break;
 		case 5 :
-			//_stacklessMergeNodesV1._quantilizedNodes.ReadToHost();
-			//BvhUtils::Unzip << <(2 * _intSize + blockDim) / blockDim, blockDim >> > (_stacklessMergeNodesV1._nodes, _stacklessMergeNodesV1._quantilizedNodes, d_bv, 2 * _intSize + 1);
-			//_stacklessMergeNodesV1._nodes.ReadToHost();
-			//_stacklessMergeNodesV1._quantilizedNodes.ReadToHost();
-			BvhUtils::quantilizedStacklessCD<true> << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
+			//BvhUtils::quantilizedStacklessCD<true> << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
+			//	d_bv, _stacklessMergeNodesV1._quantilizedNodes,
+			//	_cpNumPerVert, _cpResPerVert
+			//	);
+
+			BvhUtils::quantilizedStacklessCDShared << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
 				d_bv, _stacklessMergeNodesV1._quantilizedNodes,
-				_cpNumPerVert, _cpResPerVert
+				_resCounter, _res, maxResSize
 				);
+
 			break;
 
 		case 6:
@@ -335,6 +340,9 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 			break;
 		}
 	}
+
+	//BvhUtils::list2Vector << <gridDim, blockDim >> > (num, _cpNumPerVert, _cpResPerVert, _resCounter, _res, maxResSize);
+
 	_cpNumPerVert.ReadToHost();
 	_cpResPerVert.ReadToHost();
 	int sum = 0;
@@ -342,4 +350,7 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 		sum += _cpNumPerVert.GetHost()[i];
 	}
 	printf("%d\n", sum);
+
+	_resCounter.ReadToHost();
+	printf("query result size %d\n", _resCounter.GetHost()[0]);
 }

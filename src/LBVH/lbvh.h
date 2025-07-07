@@ -64,6 +64,8 @@ namespace Lczx {
 
 		DeviceHostVector<int> _cpNumPerVert;
 		DeviceHostVector<int> _cpResPerVert;
+		DeviceHostVector<int> _resCounter;
+		DeviceHostVector<vec2i> _res;
 
 		int _type =  4; // 0. SOA stackless query     bottom to top tree build
 						// 1. SOA stack 32 query      bottom to top tree build
