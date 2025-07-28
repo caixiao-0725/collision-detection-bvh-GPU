@@ -229,7 +229,7 @@ void OptixLauncher::init()
 	CUDA_CHECK(cudaStreamCreate(&m_stream));
 	
 	createContext();
-	if (m_type)  // AABB primitive
+	if (m_type!=0)  // AABB primitive
 		createAABBModule();
 	else 
 		createTriangleModule();
@@ -620,6 +620,8 @@ void OptixLauncher::buildAABBGeometry(OptixAABBLauncherInfo& info,
 	const size_t AABBSizeInBytes = info.numAABB * sizeof(AABB);
 	CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&info.AABBBuffer), AABBSizeInBytes));
 
+	m_cpuParams.indexBuffer = gpuIndexBuffer;
+
 	setAABBBuffer((AABB*)info.AABBBuffer,
 		gpuVertexBuffer,
 		gpuIndexBuffer,
@@ -644,7 +646,7 @@ void OptixLauncher::buildAABBGeometryWithGPUData(OptixAABBLauncherInfo& info,
 
 	// build GAS
 	OptixAccelBuildOptions accel_options = {};
-	accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION | OPTIX_BUILD_FLAG_ALLOW_UPDATE | OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+	accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
 	accel_options.motionOptions.numKeys = 1;
 	accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
 
@@ -711,10 +713,12 @@ void OptixLauncher::launchForEdge(void* gpuVerts, void* edges, const uint numEdg
 		m_cdBuffer.Allocate(numEdges * MAX_CD_NUM_PER_VERT);
 		m_cpuParams.vertexs = (float3*)gpuVerts;
 		m_cpuParams.edgeIndex = (int2*)edges;
+		m_cpuParams.handle = m_obstacleGASHandle;
 		m_cpuParams.cdIndex = (int*)m_cdIndex.GetDevice();
 		m_cpuParams.cdBuffer = (int*)m_cdBuffer.GetDevice();
 		CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(m_gpuParams), &m_cpuParams, sizeof(Params), cudaMemcpyHostToDevice));
 	}
+	//m_cdIndex.SetDeviceZero();
 	OPTIX_CHECK(optixLaunch(m_obstaclePipeline, 0, m_gpuParams, sizeof(Params), &m_obstacleSbt, numEdges, 1, 1));
 }
 

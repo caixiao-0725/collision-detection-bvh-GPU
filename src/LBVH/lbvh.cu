@@ -76,22 +76,33 @@ void Bvh::build(const vec3f* vertices, const vec3i* faces) {
 	int blockDim = K_THREADS;
 	int gridDim = (_primSize + blockDim - 1) / blockDim;
 
-	BvhUtils::calcMaxBVWarpShuffle << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, faces, vertices, d_bv);
+
+
+	BvhUtils::calcMaxBVWarpShuffle << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, faces, vertices, _thickness, d_bv);
 	BvhUtils::calcMCs<<<dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >>>(_primSize, faces, vertices, d_bv, _extNodes._mtcode);
 	checkThrustErrors(thrust::sequence(thrust::device, d_vals.GetDevice(), d_vals.GetDevice() + d_vals.GetSize()));
 	checkThrustErrors(thrust::sort_by_key(thrust::device, _extNodes._mtcode.GetDevice(), _extNodes._mtcode.GetDevice() + _extNodes._mtcode.GetSize(), d_vals.GetDevice()));
 	BvhUtils::calcInverseMapping << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, d_vals, d_primMap);
 
-	BvhUtils::buildPrimitives << < gridDim, blockDim >> > (_primSize,lvs()._idx, lvs()._box, d_primMap, faces, vertices);
+	BvhUtils::buildPrimitives << < gridDim, blockDim >> > (_primSize,lvs()._idx, lvs()._box, d_primMap, faces, _thickness,vertices);
 
-	// build external nodes
-    lvs().buildExtNodes(_primSize);
-	lvs().calcSplitMetrics(extSize());
+	if (_type > 10) {
+		BvhUtils::lbvhBuildInternalKernel << < gridDim, blockDim >> > (mgs()._nodes, lvs()._par, lvs()._mtcode, lvs()._idx, _primSize);
 
-	// build internal nodes
-	tks().clearIntNodes(_primSize-1);
-	BvhUtils::buildIntNodes << < dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, d_count, lvs()._lca, lvs()._metric, lvs()._par, lvs()._mark, lvs()._box,
-		untks()._rc, untks()._lc, untks()._rangey, untks()._rangex, untks()._mark, untks()._box, untks()._flag, untks()._par);
+		mgs().clearFlags();
+		BvhUtils::mergeNodeRefit << < gridDim, blockDim >> > (mgs()._nodes, lvs()._par, lvs()._box, lvs()._idx, mgs()._flags, extSize());
+	}
+	else {
+		// build external nodes
+		lvs().buildExtNodes(_primSize);
+		lvs().calcSplitMetrics(extSize());
+
+		// build internal nodes
+		untks().clearIntNodes(_primSize - 1);
+		BvhUtils::buildIntNodes << < dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, d_count, lvs()._lca, lvs()._metric, lvs()._par, lvs()._mark, lvs()._box,
+			untks()._rc, untks()._lc, untks()._rangey, untks()._rangex, untks()._mark, untks()._box, untks()._flag, untks()._par);
+		reorderIntNodes();
+	}
 	
 }
 
@@ -105,7 +116,7 @@ void Bvh::reorderIntNodes() {
 	checkThrustErrors(thrust::fill(thrust::device, lvs()._lca.GetDevice() + extSize(),
 		lvs()._lca.GetDevice() + extSize() + 1, -1));
 	
-	
+	lvs()._lca.ReadToHost();
 	BvhUtils::updateBvhExtNodeLinks << <gridDim, blockDim >> > (extSize(),d_tkMap, lvs()._lca, lvs()._par);
 	const int intGridDim = (intSize() + blockDim - 1) / blockDim;
 	switch (_type)
@@ -167,7 +178,7 @@ void Bvh::build(const AABB* boxs) {
 	int blockDim = K_THREADS;
 	int gridDim = (_primSize + blockDim - 1) / blockDim;
 
-	cudaMemcpy(d_bv.GetDevice(), boxs, sizeof(AABB), cudaMemcpyDeviceToDevice);
+	//cudaMemcpy(d_bv.GetDevice(), boxs, sizeof(AABB), cudaMemcpyDeviceToDevice);
 
 	BvhUtils::calcMaxBVFromBox << <dim3(gridDim, 1, 1), dim3(blockDim, 1, 1) >> > (_primSize, boxs, d_bv);
 
@@ -239,10 +250,14 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 			break;
 		case 4:
 			//_stacklessMergeNodesV1._nodes.ReadToHost();
-			BvhUtils::AosBvhStacklessCDV1<true> << <gridDim, blockDim >> > (num, boxs, intSize(),lvs()._idx,
+			BvhUtils::AosBvhStacklessCDV1Asm<true> << <gridDim, blockDim >> > (num, boxs, intSize(),lvs()._idx,
 				_stacklessMergeNodesV1._nodes,
 				_cpNumPerVert, _cpResPerVert
 				);
+			//BvhUtils::AosBvhStacklessCDV1AsmShared << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
+			//	_stacklessMergeNodesV1._nodes,
+			//	_resCounter, _res, maxResSize
+			//	);
 			break;
 		case 5 :
 			//BvhUtils::quantilizedStacklessCD<true> << <gridDim, blockDim >> > (num, boxs, intSize(), lvs()._idx,
@@ -350,6 +365,43 @@ void Bvh::query(const AABB* boxs, const uint num,bool self) {
 		sum += _cpNumPerVert.GetHost()[i];
 	}
 	printf("%d\n", sum);
+
+	_resCounter.ReadToHost();
+	printf("query result size %d\n", _resCounter.GetHost()[0]);
+}
+
+void Bvh::queryEF(vec3f* p, vec2i* e, vec3i* f, const uint num) {
+	int blockDim = K_THREADS;
+	int gridDim = (num + blockDim - 1) / blockDim;
+	const int maxResSize = 8000000;
+
+	if (_res.GetSize() == 0) {
+		_resCounter.Allocate(1);
+		_res.Allocate(maxResSize);
+	}
+
+	DeviceHostVector<int4> _face_idx;
+	_face_idx.Allocate(_primSize);
+	BvhUtils::mergeFaceAndIdx << <(_primSize + blockDim - 1) / blockDim, blockDim >> > (_face_idx, lvs()._idx,f, _primSize);
+	BvhUtils::queryEFCDBetter << <gridDim, blockDim >> > (num, e, p, f, 0,
+		_primSize - 1, _face_idx, d_bv, _stacklessMergeNodesV1._quantilizedNodes,
+		_resCounter, _res, maxResSize
+		);
+
+
+	//DeviceHostVector<int> d_cullCounter;
+	//d_cullCounter.Allocate(1);
+	//DeviceHostVector<vec2i> d_cullRes;
+	//d_cullRes.Allocate(maxResSize);
+	//BvhUtils::queryEFCD << <gridDim, blockDim >> > (num, e, p , f, _thickness,
+	//	_primSize-1, lvs()._idx, d_bv, _stacklessMergeNodesV1._quantilizedNodes,
+	//	_resCounter, _res, maxResSize
+	//	);
+	//
+	//BvhUtils::FilterRes << <(maxResSize + blockDim - 1) / blockDim, blockDim >> > (maxResSize, _res, _resCounter,e,f, d_cullRes ,d_cullCounter, maxResSize);
+	//
+	//d_cullCounter.ReadToHost();
+	//printf("cull result size %d\n", d_cullCounter.GetHost()[0]);
 
 	_resCounter.ReadToHost();
 	printf("query result size %d\n", _resCounter.GetHost()[0]);

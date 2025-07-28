@@ -65,48 +65,135 @@ public:
 	}
 };
 
+void loadobj(std::string filename, std::vector<vec3f>& position, std::vector<vec3i>& face, std::vector<vec2i>& edge) {
+    std::ifstream in;
+    in.open(filename, std::ifstream::in);
+    if (in.fail())
+        return;
+    std::string line;
+    while (!in.eof())
+    {
+        std::getline(in, line);
+        std::istringstream iss(line.c_str());
+        char trash;
+        if (!line.compare(0, 2, "v "))
+        {
+            iss >> trash;
+            vec3f v;
+            for (int i = 0; i < 3; i++)
+                iss >> v.raw[i];
+            position.push_back(v);
+        }
+        else if (!line.compare(0, 2, "f "))
+        {
+            int iuv, idx;
+            iss >> trash;
+            vec3i f;
+            int count = 0;
+            std::string vertex;
+            while (iss >> vertex)
+            {
+                std::istringstream vss(vertex);
+                std::string index;
+                std::getline(vss, index, '/');
+                std::istringstream(index) >> idx;
+                f.raw[count] = idx - 1;
+                count++;
+            }
+            face.push_back(f);
+        }
+    }
 
-int main0() {
-    // edge
-    DeviceHostVector<vec3f> edges_points;
-    DeviceHostVector<vec2i> edges_indexs;
+    std::set<std::pair<int, int>> edges;
+    for (int f = 0; f < face.size();f++) {
+        for (int i = 0;i < 3;i++) {
+            int v1 = face[f].raw[i];
+            int v2 = face[f].raw[(i + 1) % 3];
+            if (v1 > v2) std::swap(v1, v2);
+            edges.insert(std::make_pair(v1, v2));
+        }
+    }
 
-    edges_points.Allocate(2);
-    edges_indexs.Allocate(1);
+    for (const auto& e : edges) {
+        edge.push_back(vec2i(e.first, e.second));
+    }
 
-    edges_points.GetHost()[0] = vec3f(0, 1, 0);
-	edges_points.GetHost()[1] = vec3f(0, -1, 0);
+    std::cerr << "[Mesh] vert: " << position.size() << "   face: " << face.size() << std::endl;
+}
 
-	edges_indexs.GetHost()[0] = vec2i(1, 0);
 
-	edges_points.ReadToDevice();
-	edges_indexs.ReadToDevice();
-    // model;
+int main() {
 
-	Mesh m_obstacle;
 
-	std::string path = get_asset_path() + "plane/20.obj";
-    m_obstacle.readObj(path.c_str());
+    //// edge
+    //DeviceHostVector<vec3f> edges_points;
+    //DeviceHostVector<vec2i> edges_indexs;
+    //
+    //edges_points.Allocate(2);
+    //edges_indexs.Allocate(1);
+    //
+    //edges_points.GetHost()[0] = vec3f(0, 1, 0);
+	//edges_points.GetHost()[1] = vec3f(0, -1, 0);
+    //
+	//edges_indexs.GetHost()[0] = vec2i(1, 0);
+    //
+	//edges_points.ReadToDevice();
+	//edges_indexs.ReadToDevice();
+    //// model;
+    //
+	//Mesh m_obstacle;
+    //
+	//std::string path = get_asset_path() + "plane/20.obj";
+    //m_obstacle.readObj(path.c_str());
+    //
+	//OptixLauncher optix;
+    //optix.m_type = 1;
+    //optix.init();
+    //
+    //float transform[3][4];
+    //optix.buildAABBObstacle(m_obstacle.points.GetDevice(), m_obstacle.faces.GetDevice(), m_obstacle.faces.GetSize(), 0.001f, transform);
+    //optix.launchForEdge((void*)edges_points.GetDevice(), (void*)edges_indexs.GetDevice(), edges_indexs.GetSize());
 
-	OptixLauncher temp;
-    temp.m_type = 1;
-	temp.init();
 
-    uint32_t vertexCount = m_obstacle.points.GetSize();
-    uint32_t indexCount = m_obstacle.faces.GetSize()*3;
+    std::string mesh_file = get_asset_path() + "models/0.obj";
+    std::vector<vec3f> position;
+    std::vector<vec3i> face;
+    std::vector<vec2i> edge;
+    loadobj(mesh_file, position, face, edge);
+    DeviceHostVector<vec3f> d_position;
+    d_position.Allocate(position.size());
+    d_position.SetDeviceHost(position.size(), position.data());
+    DeviceHostVector<vec3i> d_face;
+    d_face.Allocate(face.size());
+    d_face.SetDeviceHost(face.size(), face.data());
+    DeviceHostVector<vec2i> d_edge;
+    d_edge.Allocate(edge.size());
+    d_edge.SetDeviceHost(edge.size(), edge.data());
+
+
+    OptixLauncher optix;
+    optix.m_type = 1;
+    optix.init();
+
     float transform[3][4];
+    optix.buildAABBObstacle(d_position.GetDevice(), d_face.GetDevice(), d_face.GetSize(), 0.001f, transform);
+    optix.launchForEdge((void*)d_position.GetDevice(), (void*)d_edge.GetDevice(), d_edge.GetSize());
+    
+    //optix.buildTriangleObstacle((void*)m_obstacle.points.GetDevice(), vertexStride, posOffset, vertexCount,
+    //(void*)m_obstacle.faces.GetDevice(), indexCount, transform);
 
-    temp.buildAABBObstacle(m_obstacle.points.GetDevice(), m_obstacle.faces.GetDevice(), m_obstacle.faces.GetSize(),0.001f, transform);
-    //temp.buildTriangleObstacle((void*)m_obstacle.points.GetDevice(), vertexStride, posOffset, vertexCount,
-    //    (void*)m_obstacle.faces.GetDevice(), indexCount, transform);
-
-    temp.launchForEdge((void*)edges_points.GetDevice(), (void*)edges_indexs.GetDevice(), edges_indexs.GetSize());
-
+    optix.m_cdIndex.ReadToHost();
+    optix.m_cdBuffer.ReadToHost();
+    int sum = 0;
+    for (size_t i = 0; i < optix.m_cdIndex.GetSize(); i++) {
+        sum += optix.m_cdIndex.GetHost()[i];
+    }
+    std::cout << "Collision Count: " << sum << std::endl;
 
 	return 0;
 }
 
-int main() {
+int main0() {
     const int N = 100000;
     const float R = 0.001f;
 

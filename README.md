@@ -1,5 +1,7 @@
 # collision-detection-bvh-GPU
 
+Most cuda with little ptx language.
+
 参考王鑫磊师兄的代码，代码有点老了，现在的机器上跑会出错，我的机子是一台3080。
 
 ### lbvh
@@ -44,7 +46,7 @@ https://github.com/jerry060599/KittenGpuLBVH
 
 在用optix建树的时候，发现建树有点慢，是自己的写的4倍慢，有可能是我的建树的某些参数没设置。但是optix的query是比传统的方法要快的。
 
-### 比optix更快更准的方法！
+### 比optix更快的方法！
 
 基于stackless query，想办法将32字节压缩至16字节，时间直接缩短了一半，比optix还快还准哦。(type = 5)
 
@@ -54,4 +56,5 @@ https://github.com/jerry060599/KittenGpuLBVH
 
 对比half精度的做法，half的尾数有10位，但是我的15位全部用来存储尾数(基数和正负符号位都可以扔了)，所以我的false positive的数量是少于half的。
 
-最终结果比opitx快了10%。
+最终结果在某些case上比opitx快了10%。
+

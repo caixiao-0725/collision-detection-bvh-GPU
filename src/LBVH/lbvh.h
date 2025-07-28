@@ -24,6 +24,7 @@ namespace Lczx {
 		void build(const vec3f* vertices,const vec3i* faces);
 		void build(const AABB* boxs);
 		void query(const AABB* boxs, const uint num,bool self);
+		void queryEF(vec3f* p, vec2i* e,vec3i* f,const uint num);
 
 
 		void reorderIntNodes();
@@ -37,6 +38,7 @@ namespace Lczx {
 		IntNodeArray& untks() { return _unsortedTks; }
 		MergeNodeArray& mgs() { return _mergeNodes; }
 
+		float _thickness = 0.001f;
 		int	_primSize, _extSize, _intSize;
 		ExtNodeArray _extNodes;
 		IntNodeArray _intNodes;

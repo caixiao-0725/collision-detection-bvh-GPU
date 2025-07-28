@@ -8,11 +8,14 @@
 
 #include "lbvh.h"
 
+#include <unordered_set>
 #include <iostream>
 #include <fstream>
 #include <algorithm>
 #include <string>
 #include <iomanip>
+#include <fstream>
+#include <sstream>
 #include "common.h"
 
 // Platform-specific filesystem includes
@@ -96,6 +99,62 @@ std::vector<int> get_frame_numbers(const std::string& dataset_path) {
     return frame_numbers;
 }
 
+void loadObj(std::string filename, std::vector<vec3f>& position, std::vector<vec3i>& face,std::vector<vec2i>& edge) {
+    std::ifstream in;
+    in.open(filename, std::ifstream::in);
+    if (in.fail())
+        return;
+    std::string line;
+    while (!in.eof())
+    {
+        std::getline(in, line);
+        std::istringstream iss(line.c_str());
+        char trash;
+        if (!line.compare(0, 2, "v "))
+        {
+            iss >> trash;
+            vec3f v;
+            for (int i = 0; i < 3; i++)
+                iss >> v.raw[i];
+            position.push_back(v);
+        }
+        else if (!line.compare(0, 2, "f "))
+        {
+            int iuv, idx;
+            iss >> trash;
+            vec3i f;
+			int count = 0;
+            std::string vertex;
+            while (iss >> vertex)
+            {
+                std::istringstream vss(vertex);
+                std::string index;
+                std::getline(vss, index, '/');
+                std::istringstream(index) >> idx;
+				f.raw[count] = idx-1;
+                count++;
+            }
+            face.push_back(f);
+        }
+    }
+
+    std::set<std::pair<int, int>> edges;
+    for (int f = 0; f < face.size();f++) {
+        for (int i = 0;i < 3;i++) {
+			int v1 = face[f].raw[i];
+			int v2 = face[f].raw[(i + 1) % 3];
+			if (v1 > v2) std::swap(v1, v2);
+			edges.insert(std::make_pair(v1, v2));
+        }
+    }
+
+	for (const auto& e : edges) {
+		edge.push_back(vec2i(e.first, e.second));
+	}
+
+    std::cerr << "[Mesh] vert: " << position.size() << "   face: " << face.size() << std::endl;
+}
+
 struct TestResult {
     int frame;
     float time;
@@ -145,12 +204,30 @@ void save_results_to_csv(const std::string& dataset_name, const std::vector<Test
     std::cout << "Results saved to " << csv_path << std::endl;
 }
 
-TestResult test_frame(const std::string& dataset_name, int frame_num) {
-    TestResult result;
-    result.frame = frame_num;
-    result.time = frame_num / 50.0f;  // Convert frame number to time
-    result.query_matches_ground_truth = true;
-    result.self_query_matches_ground_truth = true;
+void test_obj() {
+    std::string mesh_file = get_asset_path() + "models/0.obj";
+	std::vector<vec3f> position;
+	std::vector<vec3i> face;
+	std::vector<vec2i> edge;
+	loadObj(mesh_file, position, face, edge);
+	DeviceHostVector<vec3f> d_position;
+	d_position.Allocate(position.size());
+	d_position.SetDeviceHost(position.size(), position.data());
+	DeviceHostVector<vec3i> d_face;
+	d_face.Allocate(face.size());
+	d_face.SetDeviceHost(face.size(), face.data());
+	DeviceHostVector<vec2i> d_edge;
+	d_edge.Allocate(edge.size());
+	d_edge.SetDeviceHost(edge.size(), edge.data());
+	Bvh A;
+	A._type = 5;
+	A.setup(d_face.GetSize(), d_face.GetSize(), d_face.GetSize() - 1);
+	A.build(d_position, d_face);
+    A.queryEF(d_position, d_edge, d_face, d_edge.GetSize());
+	//std::cout << "AABBs built for mesh with " << face.size() << " faces." << std::endl;
+}
+
+void test_frame(const std::string& dataset_name, int frame_num) {
 
     std::string asset_path = get_asset_path();
     std::string mesh_file = asset_path + dataset_name + "/mesh_triangle_aabb_frame_" +
@@ -158,19 +235,8 @@ TestResult test_frame(const std::string& dataset_name, int frame_num) {
     std::string collider_file = asset_path + dataset_name + "/moving_collider_triangle_aabb_frame_" +
         std::string(6 - std::to_string(frame_num).length(), '0') + std::to_string(frame_num) + ".bin";
 
-    std::cout << "Processing frame " << frame_num << " (t=" << result.time << "s)" << std::endl;
     auto mesh_aabbs = load_aabb_file(mesh_file);
     auto collider_aabbs = load_aabb_file(collider_file);
-
-    if (mesh_aabbs.empty() || collider_aabbs.empty()) {
-        std::cerr << "Error: Failed to load AABB files for frame " << frame_num << std::endl;
-        result.query_matches_ground_truth = false;
-        result.self_query_matches_ground_truth = false;
-        return result;
-    }
-
-    result.mesh_count = mesh_aabbs.size();
-    result.collider_count = collider_aabbs.size();
 
     std::cout << "  Mesh AABBs: " << mesh_aabbs.size() << ", Collider AABBs: " << collider_aabbs.size() << std::endl;
     
@@ -182,66 +248,27 @@ TestResult test_frame(const std::string& dataset_name, int frame_num) {
     d_collider_aabbs.SetDeviceHost(collider_aabbs.size(), collider_aabbs.data());
     
     Bvh A;
-    A._type = 5;
+    A._type = 4;
     A.setup(mesh_aabbs.size(), mesh_aabbs.size(), mesh_aabbs.size() - 1);
 
-    // Test culbvh with ground truth comparison
-    {
-        cudaEvent_t start, stop;
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
 
-        std::cout << "  Testing culbvh..." << std::endl;
-
-        // Build collider BVH
-        cudaEventRecord(start);
-
-        A.build(d_mesh_aabbs.GetDevice());
-
-        cudaEventRecord(stop);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&result.mesh_build_time, start, stop);
-        
-        // Query between collider and mesh
-
-        cudaEventRecord(start);
-        A.query(d_mesh_aabbs.GetDevice(), d_mesh_aabbs.GetSize(), true);
-        //A.query(d_collider_aabbs.GetDevice(), d_collider_aabbs.GetSize(),false);
-        cudaEventRecord(stop);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&result.query_time, start, stop);
-
-        // Compare with ground truth for collider-mesh query
-        result.query_matches_ground_truth = A._cpNum.GetHost()[0];
+    std::cout << "  Testing culbvh..." << std::endl;
 
 
-        //cudaEventRecord(start);
-        //result.self_query_contacts = mesh_bvh.query(thrust::raw_pointer_cast(d_self_results.data()), self_max_results);
-        //cudaEventRecord(stop);
-        //cudaEventSynchronize(stop);
-        //cudaEventElapsedTime(&result.self_query_time, start, stop);
-        //
-        //// Compare with ground truth for mesh self-query
-        //result.self_query_matches_ground_truth = mesh_bvh.query_compare_ground_truth(
-        //    thrust::raw_pointer_cast(d_self_results.data()), result.self_query_contacts);
+    A.build(d_mesh_aabbs.GetDevice());
 
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
+    
+    // Query between collider and mesh
+    A.query(d_mesh_aabbs.GetDevice(), d_mesh_aabbs.GetSize(), true);
+    //A.query(d_collider_aabbs.GetDevice(), d_collider_aabbs.GetSize(),false);
 
-        //std::cout << "    Collider Build: " << result.collider_build_time << "ms" << std::endl;
-        //std::cout << "    Mesh Build: " << result.mesh_build_time << "ms" << std::endl;
-        //std::cout << "    Query: " << result.query_time << "ms, Contacts: " << result.query_contacts
-        //    << ", Matches Ground Truth: " << (result.query_matches_ground_truth ? "Yes" : "No") << std::endl;
-        //std::cout << "    Self-Query: " << result.self_query_time << "ms, Contacts: " << result.self_query_contacts
-        //    << ", Matches Ground Truth: " << (result.self_query_matches_ground_truth ? "Yes" : "No") << std::endl;
-    }
-
-    return result;
+    return ;
 }
 
 
 
 int main() {
+    //test_obj();
     test_frame("dance",650);
     return 0;
 }

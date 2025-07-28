@@ -44,10 +44,12 @@ namespace Lczx {
 
 		__global__ void calcMaxBVFromBox(int size, const BOX* box, BOX* _bv) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx == 0) {
+				_bv[0] = BOX(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			}
 			int warpTid = threadIdx.x % 32;
 			int warpId = (threadIdx.x >> 5);
 			int warpNum = ((blockDim.x) >> 5);
-			//if (idx >= size) return;
 
 			__shared__ AABB aabbData[K_THREADS >> 5];
 
@@ -60,16 +62,7 @@ namespace Lczx {
 			}
 			__syncthreads();
 			
-			
-			//if (blockIdx.x == gridDim.x - 1)
-			//{
-			//	//tidNum = numbers - idof;
-			//	warpNum = ((size - blockIdx.x * blockDim.x + 31) >> 5);
-			//}
-			//else
-			//{
-			//	warpNum = ((blockDim.x) >> 5);
-			//}
+		
 
 			for (int i = 1; i < 32; i = (i << 1))
 			{
@@ -189,12 +182,11 @@ namespace Lczx {
 			}
 		}
 
-		__global__ void calcMaxBVWarpShuffle(int size, const vec3i* _faces, const vec3f* _vertices, BOX* _bv) {
+		__global__ void calcMaxBVWarpShuffle(int size, const vec3i* _faces, const vec3f* _vertices, const float thickness,BOX* _bv) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			int warpTid = threadIdx.x % 32;
 			int warpId = (threadIdx.x >> 5);
-			int warpNum;
-			if (idx >= size) return;
+			int warpNum = ((blockDim.x) >> 5);
 			if (idx == 0) {
 				_bv[0] = BOX(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 			}
@@ -202,15 +194,21 @@ namespace Lczx {
 			__shared__ AABB aabbData[K_THREADS>>5];
 
 			BOX temp;
-			vec3i pair = _faces[idx];
+			if (idx < size) {
+				vec3i pair = _faces[idx];
 
-			vec3f a1 = _vertices[pair.x];
-			vec3f a2 = _vertices[pair.y];
-			vec3f a3 = _vertices[pair.z];
+				vec3f a1 = _vertices[pair.x];
+				vec3f a2 = _vertices[pair.y];
+				vec3f a3 = _vertices[pair.z];
 
-			temp.combines(a1.x, a1.y, a1.z);
-			temp.combines(a2.x, a2.y, a2.z);
-			temp.combines(a3.x, a3.y, a3.z);
+				temp.combines(a1.x, a1.y, a1.z);
+				temp.combines(a2.x, a2.y, a2.z);
+				temp.combines(a3.x, a3.y, a3.z);
+				temp.enlarges(thickness);
+			}
+			else {
+				temp = BOX(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			}
 			
 			__syncthreads();
 
@@ -222,24 +220,17 @@ namespace Lczx {
 				float tempMaxX = __shfl_down_sync(0xffffffff, temp._max.x, i);
 				float tempMaxY = __shfl_down_sync(0xffffffff, temp._max.y, i);
 				float tempMaxZ = __shfl_down_sync(0xffffffff, temp._max.z, i);
+
+				//printf("%d  %f   %f \n", idx, temp._min.x, tempMinX);
 				temp._min.x = __mm_min(temp._min.x, tempMinX);
 				temp._min.y = __mm_min(temp._min.y, tempMinY);
 				temp._min.z = __mm_min(temp._min.z, tempMinZ);
 				temp._max.x = __mm_max(temp._max.x, tempMaxX);
 				temp._max.y = __mm_max(temp._max.y, tempMaxY);
 				temp._max.z = __mm_max(temp._max.z, tempMaxZ);
-			}
 
-			if (blockIdx.x == gridDim.x - 1)
-			{
-				//tidNum = numbers - idof;
-				warpNum = ((size - blockIdx.x * blockDim.x + 31) >> 5);
 			}
-			else
-			{
-				warpNum = ((blockDim.x) >> 5);
-			}
-
+			//if (idx >= size) return;
 			if (warpTid == 0)
 			{
 				aabbData[warpId] = temp;
@@ -340,7 +331,7 @@ namespace Lczx {
             invMap[map[idx]] = idx;
         }
 
-		__global__ void buildPrimitives(int size,int* _primIdx,BOX* _primBox, int* _primMap,const vec3i* _faces,const vec3f* _vertices) {	///< update idx-th _bxs to idx-th leaf
+		__global__ void buildPrimitives(int size,int* _primIdx,BOX* _primBox, int* _primMap,const vec3i* _faces,const float thickness,const vec3f* _vertices) {	///< update idx-th _bxs to idx-th leaf
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= size) return;
 			//for (; idx < size; idx += gridDim.x * blockDim.x) {
@@ -352,9 +343,8 @@ namespace Lczx {
 			bv.combines(v.x, v.y, v.z);
 			v = _vertices[_faces[idx].z];
 			bv.combines(v.x, v.y, v.z);
-			//_prims.vida(newIdx) = _faces[idx].x;
-			//_prims.vidb(newIdx) = _faces[idx].y;
-			//_prims.vidc(newIdx) = _faces[idx].z;
+			bv.enlarges(thickness);
+
 			_primIdx[newIdx] = idx;
 			_primBox[newIdx] = bv;
 		}
@@ -417,8 +407,6 @@ namespace Lczx {
 			int* _tks_rc,int*_tks_lc,int* _tks_range_y, int* _tks_range_x,uint* _tks_mark, BOX* _tks_box, uint* _flag,int* _tks_par) {
 			int idx = blockIdx.x * blockDim.x + threadIdx.x;
 			if (idx >= size) return;
-			//_tks_range_x[idx] = -1;
-			//__syncthreads();
 			_lvs_lca[idx] = -1, _depths[idx] = 0;
 			int		l = idx - 1, r = idx;	///< (l, r]
 			bool	mark;
@@ -427,33 +415,19 @@ namespace Lczx {
 			else		mark = false;
 			int		cur = mark ? l : r;
 
-			//if (cur == 254)printf("%d  %d  %d  %d  %d\n", idx, mark, _lvs_metric[l], _lvs_metric[r], cur);
 			_lvs_par[idx] = cur;
 			if (mark)	_tks_rc[cur] = idx, _tks_range_y[cur] = idx, atomicOr(&_tks_mark[cur], 0x00000002), _lvs_mark[idx] = 0x00000007;
 			else		_tks_lc[cur] = idx, _tks_range_x[cur] = idx, atomicOr(&_tks_mark[cur], 0x00000001), _lvs_mark[idx] = 0x00000003;
-			//__threadfence();
 			while (atomicAdd(&_flag[cur], 1) == 1) {
-				//_tks.update(cur, _lvs);	/// Update
-				//_tks.refit(cur, _lvs);	/// Refit
 				int chl = _tks_lc[cur];
 				int chr = _tks_rc[cur];
 				uint temp_mark = _tks_mark[cur];
-				if (temp_mark & 1) {
-					_tks_box[cur] = _lvs_box[chl];
-				}
-				else {
-					_tks_box[cur] = _tks_box[chl];
-				}
-				if (temp_mark & 2) {
-					_tks_box[cur].combines(_lvs_box[chr]);
-				}
-				else {
-					_tks_box[cur].combines(_tks_box[chr]);
-				}
-
+				AABB tempBoxL = (temp_mark & 1) ? _lvs_box[chl] : _tks_box[chl];
+				AABB tempBoxR = (temp_mark & 2) ? _lvs_box[chr] : _tks_box[chr];
+				tempBoxL.combines(tempBoxR);
+				_tks_box[cur] = tempBoxL;
+			
 				_tks_mark[cur] &= 0x00000007;
-				//if (idx < 10) printf("%d   %d\n", idx, _tks_mark[cur]);
-				//if (_tks_range_x[cur] == 0) printf("cur:%d  %d  %d   %d   %d\n", cur, _tks_range_x[252], _tks_range_y[252], _tks_lc[252], _tks_rc[252]);
 				l = _tks_range_x[cur] - 1, r = _tks_range_y[cur];
 				_lvs_lca[l + 1] = cur/*, _tks.rcd(cur) = ++_lvs.rcl(r)*/, _depths[l + 1]++;
 				if (l >= 0)	mark = _lvs_metric[l] < _lvs_metric[r];	///< true when right child, false otherwise
@@ -470,6 +444,119 @@ namespace Lczx {
 				if (mark)	_tks_rc[par] = cur, _tks_range_y[par] = r, atomicAnd(&_tks_mark[par], 0xFFFFFFFD), _tks_mark[cur] |= 0x00000004;
 				else		_tks_lc[par] = cur, _tks_range_x[par] = l + 1, atomicAnd(&_tks_mark[par], 0xFFFFFFFE), _tks_mark[cur] &= 0xFFFFFFFB;
 				__threadfence();
+				cur = par;
+			}
+		}
+
+		__global__ void buildIntNodesAsm(int size, uint* _depths,
+			int* _lvs_lca, int* _lvs_metric, uint* _lvs_par, uint* _lvs_mark, BOX* _lvs_box,
+			int* _tks_rc, int* _tks_lc, int* _tks_range_y, int* _tks_range_x, uint* _tks_mark, BOX* _tks_box, uint* _flag, int* _tks_par) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= size) return;
+			_lvs_lca[idx] = -1, _depths[idx] = 0;
+			int		l = idx - 1, r = idx;	///< (l, r]
+			bool	mark;
+
+			if (l >= 0)	mark = _lvs_metric[l] < _lvs_metric[r]; //determine direction
+			else		mark = false;
+			int		cur = mark ? l : r;
+
+			_lvs_par[idx] = cur;
+			if (mark)	_tks_rc[cur] = idx, _tks_range_y[cur] = idx, atomicOr(&_tks_mark[cur], 0x00000002), _lvs_mark[idx] = 0x00000007;
+			else		_tks_lc[cur] = idx, _tks_range_x[cur] = idx, atomicOr(&_tks_mark[cur], 0x00000001), _lvs_mark[idx] = 0x00000003;
+			while (atomicAdd(&_flag[cur], 1) == 1) {
+				int chl, chr;
+				uint temp_mark;
+				asm volatile (
+					"{\n\t"
+					"ld.global.cv.u32 	%0, [%3];\n\t"
+					"ld.global.cv.u32 	%1, [%4];\n\t"
+					"ld.global.cv.u32 	%2, [%5];\n\t"
+					"}\n\t"
+					: "=r"(chl), "=r"(chr), "=r"(temp_mark)
+					: "l"(&_tks_lc[cur]), "l"(&_tks_rc[cur]), "l"(&_tks_mark[cur])
+					);
+
+				asm volatile (
+					"{\n\t"
+					".reg .f32 	%%f<10>;\n\t"
+					"ld.global.cv.f32 %%f1, [%1];\n\t"
+					"ld.global.cv.f32 %%f2, [%2];\n\t"
+					"min.f32 	%%f3, %%f2, %%f1;\n\t"
+					"ld.global.cv.f32 %%f1, [%1+4];\n\t"
+					"ld.global.cv.f32 %%f2, [%2+4];\n\t"
+					"min.f32 	%%f4, %%f2, %%f1;\n\t"
+					"ld.global.cv.f32 %%f1, [%1+8];\n\t"
+					"ld.global.cv.f32 %%f2, [%2+8];\n\t"
+					"min.f32 	%%f5, %%f2, %%f1;\n\t"
+					"ld.global.cv.f32 %%f1, [%1+12];\n\t"
+					"ld.global.cv.f32 %%f2, [%2+12];\n\t"
+					"max.f32 	%%f6, %%f2, %%f1;\n\t"
+					"ld.global.cv.f32 %%f1, [%1+16];\n\t"
+					"ld.global.cv.f32 %%f2, [%2+16];\n\t"
+					"max.f32 	%%f7, %%f2, %%f1;\n\t"
+					"ld.global.cv.f32 %%f1, [%1+20];\n\t"
+					"ld.global.cv.f32 %%f2, [%2+20];\n\t"
+					"max.f32 	%%f8, %%f2, %%f1;\n\t"
+					"st.global.wt.f32 	[%0], %%f3;\n\t"
+					"st.global.wt.f32 	[%0+4], %%f4;\n\t"
+					"st.global.wt.f32 	[%0+8], %%f5;\n\t"
+					"st.global.wt.f32 	[%0+12], %%f6;\n\t"
+					"st.global.wt.f32 	[%0+16], %%f7;\n\t"
+					"st.global.wt.f32 	[%0+20], %%f8;\n\t"
+					"}\n\t"
+					:
+				: "l"(&_tks_box[cur]), "l"((temp_mark & 1) ? &_lvs_box[chl] : &_tks_box[chl]), "l"((temp_mark & 2) ? &_lvs_box[chr] : &_tks_box[chr])
+					);
+
+				_tks_mark[cur] &= 0x00000007;
+				asm volatile (
+					"{\n\t"
+					"ld.global.cv.u32 	%0, [%2];\n\t"
+					"ld.global.cv.u32 	%1, [%3];\n\t"
+					"}\n\t"
+					:"=r"(l), "=r"(r)
+				:  "l"(&_tks_range_x[cur]), "l"(&_tks_range_y[cur])
+					);
+				l = l - 1;
+				_lvs_lca[l + 1] = cur/*, _tks.rcd(cur) = ++_lvs.rcl(r)*/, _depths[l + 1]++;
+				if (l >= 0)	mark = _lvs_metric[l] < _lvs_metric[r];	///< true when right child, false otherwise
+				else		mark = false;
+
+				if (l + 1 == 0 && r == size - 1) {
+					_tks_par[cur] = -1;
+					_tks_mark[cur] &= 0xFFFFFFFB;
+					break;
+				}
+
+				int par = mark ? l : r;
+				_tks_par[cur] = par;
+				if (mark) {
+					asm volatile (
+						"{\n\t"
+						"st.wt.global.u32 	[%0], %1;\n\t"
+						"st.wt.global.u32 	[%2], %3;\n\t"
+						"}\n\t"
+						:
+					: "l"(&_tks_rc[par]), "r"(cur), "l"(&_tks_range_y[par]), "r"(r)
+						);
+					atomicAnd(&_tks_mark[par], 0xFFFFFFFD);
+					_tks_mark[cur] |= 0x00000004;
+				}
+				else {
+					asm volatile (
+						"{\n\t"
+						"st.wt.global.u32 	[%0], %1;\n\t"
+						"st.wt.global.u32 	[%2], %3;\n\t"
+						"}\n\t"
+						:
+					: "l"(&_tks_lc[par]), "r"(cur), "l"(&_tks_range_x[par]), "r"(l + 1)
+						);
+
+					atomicAnd(&_tks_mark[par], 0xFFFFFFFE);
+					_tks_mark[cur] &= 0xFFFFFFFB;
+				}			
+				//__threadfence();
 				cur = par;
 			}
 		}
@@ -1100,6 +1187,59 @@ namespace Lczx {
 		}
 
 		template<bool SELF>
+		__global__ void AosBvhStacklessCDV1Asm(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const bvhNodeV1* _nodes,
+			int* _cpNum, int* _cpRes) {
+			int idx = blockIdx.x * blockDim.x + threadIdx.x;
+			if (idx >= Size) return;
+			idx = _lvs_idx[idx];
+			bvhNodeV1 node;
+			int st = 0;
+			int count = 0;
+			const BOX bv = _box[idx];
+			do {
+				
+				asm volatile(
+					"{\n\t"
+					"ld.global.v4.u32 {%0, %1, %2, %3}, [%8];\n\t"
+					"ld.global.v4.u32 {%4, %5, %6, %7}, [%8+16];\n\t"
+					"}\n\t"
+					:"=r"(node.lc), "=r"(node.escape), 
+					"=r"(reinterpret_cast<int&>(node.bound._min.x)), "=r"(reinterpret_cast<int&>(node.bound._min.y)),
+					"=r"(reinterpret_cast<int&>(node.bound._min.z)), "=r"(reinterpret_cast<int&>(node.bound._max.x)),
+					"=r"(reinterpret_cast<int&>(node.bound._max.y)), "=r"(reinterpret_cast<int&>(node.bound._max.z))
+				: "l"(&_nodes[st])  // Load bvhNodeV1 from global memory
+					);
+				//node = _nodes[st];
+				if (node.bound.overlaps(bv)) {
+					if (node.lc == -1) {
+						int temp_idx = _lvs_idx[st - intSize];
+						if (SELF) {
+							if (temp_idx < idx) {
+								_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+								count++;
+							}
+						}
+						else {
+							_cpRes[count + idx * MAX_CD_NUM_PER_VERT] = temp_idx;
+							count++;
+						}
+
+						st = node.escape;
+					}
+					else {
+						st = node.lc;
+					}
+				}
+				else {
+					st = node.escape;
+				}
+			} while (st != -1);
+			_cpNum[idx] = count;
+		}
+
+		template<bool SELF>
 		__global__ void qNodeCD(uint Size, const BOX* _box,
 			const int intSize, const int* _lvs_idx,
 			const int* _escape,const qNode* _nodes,
@@ -1403,7 +1543,6 @@ namespace Lczx {
 			if (threadIdx.x == 0)
 				sharedCounter = 0;
 
-			ulonglong2 node;
 			int st = 0;
 			uint lc;
 			uint escape;
@@ -1412,7 +1551,7 @@ namespace Lczx {
 				if (active) {
 					while (st != MaxIndex) 
 					{				
-						node = _nodes[st];
+						ulonglong2 node = _nodes[st];
 						lc = node.x >> offset3;
 						escape = node.y >> offset3;
 						if (overlapsLonglong2int(node, bv)) {
@@ -1472,6 +1611,105 @@ namespace Lczx {
 				int offset = fullBlocks * blockDim.x + threadIdx.x;
 				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
 				
+				// Break if every thread is done.
+				if (done) break;
+			}
+		}
+
+		__global__ void AosBvhStacklessCDV1AsmShared(uint Size, const BOX* _box,
+			const int intSize, const int* _lvs_idx,
+			const bvhNodeV1* _nodes,
+			int* resCounter, vec2i* res, const int maxRes) {
+			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			bool active = tid < Size;
+			int idx;
+			bvhNodeV1 node;
+			BOX bv;
+			int st = 0;
+			__shared__ vec2i sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ int sharedCounter;		// How many results are cached in shared memory
+			__shared__ int sharedGlobalIdx;		// Where to write in global memory
+			if (threadIdx.x == 0)
+				sharedCounter = 0;
+
+			if (active) {
+				idx = _lvs_idx[tid];
+				bv = _box[idx];
+			}
+			while (true) {
+				__syncthreads();
+				if (active) {
+					while (st != -1){
+						//asm volatile(
+						//	"{\n\t"
+						//	"ld.global.v4.u32 {%0, %1, %2, %3}, [%8];\n\t"
+						//	"ld.global.v4.u32 {%4, %5, %6, %7}, [%8+16];\n\t"
+						//	"}\n\t"
+						//	:"=r"(node.lc), "=r"(node.escape),
+						//	"=r"(reinterpret_cast<int&>(node.bound._min.x)), "=r"(reinterpret_cast<int&>(node.bound._min.y)),
+						//	"=r"(reinterpret_cast<int&>(node.bound._min.z)), "=r"(reinterpret_cast<int&>(node.bound._max.x)),
+						//	"=r"(reinterpret_cast<int&>(node.bound._max.y)), "=r"(reinterpret_cast<int&>(node.bound._max.z))
+						//	: "l"(&_nodes[st])  // Load bvhNodeV1 from global memory
+						//	);
+						node = _nodes[st];
+
+						if (node.bound.overlaps(bv)) {
+							if (node.lc == -1) {
+								if (tid < st - intSize) {
+									int sIdx = atomicAdd(&sharedCounter, 1);
+									if (sIdx >= MAX_RES_PER_BLOCK) {
+										break;
+									}
+
+									sharedRes[sIdx] = vec2i(idx, _lvs_idx[st - intSize]);
+
+								}
+								st = node.escape;
+							}
+							else {
+								st = node.lc;
+							}
+						}
+						else {
+							st = node.escape;
+						}
+					}
+				}
+				// Flush whatever we have
+				__syncthreads();
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
+
+				if (threadIdx.x == 0) {
+					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
+				}
+
+				__syncthreads();
+
+				// Make sure we dont write out of bounds
+				const int globalIdx = sharedGlobalIdx;
+
+				//if (globalIdx >= maxRes || !totalRes) return;	// Out of memory for results.
+				if (threadIdx.x == 0) sharedCounter = 0;
+				//
+				//// If we got here with a half full buffer, we are done.
+				bool done = totalRes < MAX_RES_PER_BLOCK;
+				// If we are about to run out of memory, we are done.
+				if (totalRes > maxRes - globalIdx) {
+					totalRes = maxRes - globalIdx;
+					done = true;
+				}
+
+				// Copy full blocks
+				int fullBlocks = (totalRes - 1) / (int)blockDim.x;
+				for (int i = 0; i < fullBlocks; i++) {
+					int offset = i * blockDim.x + threadIdx.x;
+					res[globalIdx + offset] = sharedRes[offset];
+				}
+
+				// Copy the rest
+				int offset = fullBlocks * blockDim.x + threadIdx.x;
+				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
+
 				// Break if every thread is done.
 				if (done) break;
 			}
@@ -1884,6 +2122,297 @@ namespace Lczx {
 				last.combines(nodes[parent].bounds[1 - isRight]);
 				parent = nodes[parent].par;
 			}
+		}
+
+		__device__  __host__ __forceinline__ bool covertex_EF(vec2i& edges, vec3i& tris) {
+			for (int i = 0; i < 2; i++)
+				for (int j = 0; j < 3; j++)
+				{
+					if (edges.raw[i] == tris.raw[j])
+						return true;
+				}
+
+			return false;
+		}
+
+		__device__  __host__ __forceinline__ bool covertex_EF4(vec2i& edges, int4& tris) {
+			for (int i = 0; i < 2; i++) {
+				if (edges.raw[i] == tris.x)
+					return true;
+				if (edges.raw[i] == tris.y)
+					return true;
+				if (edges.raw[i] == tris.z)
+					return true;
+			}
+			return false;
+		}
+
+		__global__ void queryEFCD(uint Size, const vec2i* edges,
+			vec3f* verts,vec3i* faces,const float thickness,
+			const int intSize, const int* _lvs_idx,
+			const AABB* scene, const ulonglong2* _nodes,
+			int* resCounter, vec2i* res, const int maxRes) {
+			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			bool active = tid < Size;
+			vec3f origin = scene[0]._min;
+			vec3f delta = scene[0]._max;
+			vec2i edge = edges[tid];
+			intAABB bv;
+			if (active) {
+				AABB _box(verts[edge.x], verts[edge.y]);
+				_box.enlarges(thickness);
+				bv.convertFrom(_box, origin, delta);
+			}
+
+			__shared__ vec2i sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ int sharedCounter;		// How many results are cached in shared memory
+			__shared__ int sharedGlobalIdx;		// Where to write in global memory
+			if (threadIdx.x == 0)
+				sharedCounter = 0;
+
+			int st = 0;
+			uint lc;
+			uint escape;
+			while (true) {
+				__syncthreads();
+				if (active) {
+					while (st != MaxIndex)
+					{
+						ulonglong2 node = _nodes[st];
+						lc = node.x >> offset3;
+						escape = node.y >> offset3;
+						if (overlapsLonglong2int(node, bv)) {
+							if (lc == MaxIndex) {
+ 								int sIdx = atomicAdd(&sharedCounter, 1);
+								if (sIdx >= MAX_RES_PER_BLOCK) {
+									break;
+								}
+								sharedRes[sIdx] = vec2i(tid, _lvs_idx[st - intSize]);
+								st = escape;
+							}
+							else {
+								st = lc;
+							}
+						}
+						else {
+							st = escape;
+						}
+					}
+				}
+				// Flush whatever we have
+				__syncthreads();
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
+
+				if (threadIdx.x == 0) {
+					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
+				}
+
+				__syncthreads();
+
+				// Make sure we dont write out of bounds
+				const int globalIdx = sharedGlobalIdx;
+
+				if (globalIdx >= maxRes || !totalRes) return;	// Out of memory for results.
+				if (threadIdx.x == 0) sharedCounter = 0;
+				//
+				// If we got here with a half full buffer, we are done.
+				bool done = totalRes < MAX_RES_PER_BLOCK;
+				// If we are about to run out of memory, we are done.
+				if (totalRes > maxRes - globalIdx) {
+					totalRes = maxRes - globalIdx;
+					done = true;
+				}
+
+				// Copy full blocks
+				int fullBlocks = (totalRes - 1) / (int)blockDim.x;
+				for (int i = 0; i < fullBlocks; i++) {
+					int offset = i * blockDim.x + threadIdx.x;
+					res[globalIdx + offset] = sharedRes[offset];
+				}
+
+				// Copy the rest
+				int offset = fullBlocks * blockDim.x + threadIdx.x;
+				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
+
+				// Break if every thread is done.
+				if (done) break;
+			}
+		}
+
+		__global__ void FilterRes(int Size, vec2i* res, int* resCounter,
+			vec2i* edges, vec3i* faces, vec2i* cullRes,int* cullCounter,int maxRes) {
+			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			int maxNum = min(Size, resCounter[0]);
+			if (blockIdx.x >= (maxNum - 1) / blockDim.x + 1) return;
+			bool active = tid < maxNum;
+			__shared__ vec2i sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ int sharedCounter;		// How many results are cached in shared memory
+			__shared__ int sharedGlobalIdx;		// Where to write in global memory
+			if (threadIdx.x == 0)
+				sharedCounter = 0;
+
+			while (true) {
+				__syncthreads();
+				if (active) {
+					vec2i temp = res[tid];
+					vec2i edge = edges[temp.x];
+					vec3i face = faces[temp.y];
+					if (!covertex_EF(edge, face)) {
+						int sIdx = atomicAdd(&sharedCounter, 1);
+						if (sIdx >= MAX_RES_PER_BLOCK) {
+							break;
+						}
+						sharedRes[sIdx] = temp;
+					}
+				}
+				// Flush whatever we have
+				__syncthreads();
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
+
+				if (threadIdx.x == 0) {
+					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
+				}
+
+				__syncthreads();
+
+				// Make sure we dont write out of bounds
+				const int globalIdx = sharedGlobalIdx;
+
+				if (globalIdx >= maxRes || !totalRes) return;	// Out of memory for results.
+				if (threadIdx.x == 0) sharedCounter = 0;
+				//
+				// If we got here with a half full buffer, we are done.
+				bool done = totalRes < MAX_RES_PER_BLOCK;
+				// If we are about to run out of memory, we are done.
+				if (totalRes > maxRes - globalIdx) {
+					totalRes = maxRes - globalIdx;
+					done = true;
+				}
+
+				// Copy full blocks
+				int fullBlocks = (totalRes - 1) / (int)blockDim.x;
+				for (int i = 0; i < fullBlocks; i++) {
+					int offset = i * blockDim.x + threadIdx.x;
+					res[globalIdx + offset] = sharedRes[offset];
+				}
+
+				// Copy the rest
+				int offset = fullBlocks * blockDim.x + threadIdx.x;
+				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
+
+				// Break if every thread is done.
+				if (done) break;
+
+			}
+			
+		}
+
+		__global__ void queryEFCDBetter(uint Size, const vec2i* edges,
+			vec3f* verts, vec3i* faces, const float thickness,
+			const int intSize, const int4* _lvs_idx,
+			const AABB* scene, const ulonglong2* _nodes,
+			int* resCounter, vec2i* res, const int maxRes) {
+			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			bool active = tid < Size;
+			vec3f origin = scene[0]._min;
+			vec3f delta = scene[0]._max;
+			vec2i edge = edges[tid];
+			intAABB bv;
+			if (active) {
+				AABB _box(verts[edge.x], verts[edge.y]);
+				_box.enlarges(thickness);
+				bv.convertFrom(_box, origin, delta);
+			}
+
+			__shared__ vec2i sharedRes[MAX_RES_PER_BLOCK];
+			__shared__ int sharedCounter;		// How many results are cached in shared memory
+			__shared__ int sharedGlobalIdx;		// Where to write in global memory
+			if (threadIdx.x == 0)
+				sharedCounter = 0;
+
+			int st = 0;
+			uint lc;
+			uint escape;
+			while (true) {
+				__syncthreads();
+				if (active) {
+					while (st != MaxIndex)
+					{
+						ulonglong2 node = _nodes[st];
+						lc = node.x >> offset3;
+						escape = node.y >> offset3;
+						if (overlapsLonglong2int(node, bv)) {
+							if (lc == MaxIndex) {
+								int4 temp_idx = _lvs_idx[st - intSize];
+								if (!covertex_EF4(edge, temp_idx))
+								{
+									int sIdx = atomicAdd(&sharedCounter, 1);
+									if (sIdx >= MAX_RES_PER_BLOCK) {
+										break;
+									}
+									sharedRes[sIdx] = vec2i(tid, temp_idx.w);
+								}
+								st = escape;
+							}
+							else {
+								st = lc;
+							}
+						}
+						else {
+							st = escape;
+						}
+					}
+				}
+				// Flush whatever we have
+				__syncthreads();
+				int totalRes = min(sharedCounter, MAX_RES_PER_BLOCK);
+
+				if (threadIdx.x == 0) {
+					sharedGlobalIdx = atomicAdd(resCounter, totalRes);
+				}
+
+				__syncthreads();
+
+				// Make sure we dont write out of bounds
+				const int globalIdx = sharedGlobalIdx;
+
+				if (globalIdx >= maxRes || !totalRes) return;	// Out of memory for results.
+				if (threadIdx.x == 0) sharedCounter = 0;
+				//
+				// If we got here with a half full buffer, we are done.
+				bool done = totalRes < MAX_RES_PER_BLOCK;
+				// If we are about to run out of memory, we are done.
+				if (totalRes > maxRes - globalIdx) {
+					totalRes = maxRes - globalIdx;
+					done = true;
+				}
+
+				// Copy full blocks
+				int fullBlocks = (totalRes - 1) / (int)blockDim.x;
+				for (int i = 0; i < fullBlocks; i++) {
+					int offset = i * blockDim.x + threadIdx.x;
+					res[globalIdx + offset] = sharedRes[offset];
+				}
+
+				// Copy the rest
+				int offset = fullBlocks * blockDim.x + threadIdx.x;
+				if (offset < totalRes) res[globalIdx + offset] = sharedRes[offset];
+
+				// Break if every thread is done.
+				if (done) break;
+			}
+		}
+
+		__global__ void mergeFaceAndIdx(int4* res, int* idx, vec3i* face,int num) {
+			const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+			if (tid >= num) return;
+			int4 temp;
+			int temp_idx = idx[tid];
+			temp.x = face[temp_idx].x;
+			temp.y = face[temp_idx].y;
+			temp.z = face[temp_idx].z;
+			temp.w = temp_idx;
+			res[tid] = temp;
 		}
 	}
 }

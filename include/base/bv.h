@@ -133,7 +133,7 @@ struct __align__(32) bvhNodeV2 {
     AABB bound;
 };
 
-struct __align__(32) bvhNodeV1 {
+struct __align__(16) bvhNodeV1 {
     int lc;
     int escape;
     AABB bound;
