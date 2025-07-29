@@ -91,7 +91,7 @@ int main() {
 
     aabbs.ReadToDevice();
     Bvh A;
-    A._type = 4;
+    A._type = 5;
     A.setup(N, N, N - 1);
     A.build(aabbs.GetDevice());
     A.query(aabbs.GetDevice(), aabbs.GetSize(),true);

@@ -16,6 +16,7 @@ namespace Lczx {
 		int const K_REDUCTION_MODULO = K_REDUCTION_NUM - 1;
 
 		int const aabbBits = 14;
+		int const aabbRes = (1 << aabbBits) - 2;
 		int const indexBits = 64-3*aabbBits;
 		int const offset3 = aabbBits * 3;
 		int const offset2 = aabbBits * 2;
@@ -679,10 +680,6 @@ namespace Lczx {
 			if (idx >= intSize + 1) return;
 			vec3f origin = _scene_box[0]._min;
 			vec3f delta = _scene_box[0]._max - origin;
-			//if (idx == 0) {
-			//	printf("scene x :%f  %f \n", _scene_box[0]._min.x, _scene_box[0]._min.y);
-			//	printf("de :%f  %f \n", delta.x, delta.y);
-			//}
 			delta /= ((1 << aabbBits) - 2);
 
 			ulonglong2 node{0,0};
@@ -737,9 +734,6 @@ namespace Lczx {
 			}
 			
 			_nodes[newId] = internalNode;
-			if (idx == intSize-1) {
-				_scene_box[0]._max = delta;
-			}
 		}
 
 		__device__ __host__ __forceinline__ void AABB2AABBhalf(const AABB& aabb,AABBhalf& aabb_half) {
@@ -1482,7 +1476,8 @@ namespace Lczx {
 			if (idx >= Size) return;
 			idx = _lvs_idx[idx];
 			vec3f origin = scene[0]._min;
-			vec3f delta = scene[0]._max;
+			vec3f delta = scene[0]._max - origin;
+			delta /= aabbRes;
 			const AABB bv_ = _box[idx];
 			intAABB bv;
 			bv.convertFrom(bv_, origin,delta);
@@ -1529,7 +1524,8 @@ namespace Lczx {
 			int tid = blockIdx.x * blockDim.x + threadIdx.x;
 			bool active = tid < Size;
 			vec3f origin = scene[0]._min;
-			vec3f delta = scene[0]._max;
+			vec3f delta = scene[0]._max - origin;
+			delta /= aabbRes;
 			int idx;
 			intAABB bv;
 			if (active) {
@@ -2155,7 +2151,8 @@ namespace Lczx {
 			int tid = blockIdx.x * blockDim.x + threadIdx.x;
 			bool active = tid < Size;
 			vec3f origin = scene[0]._min;
-			vec3f delta = scene[0]._max;
+			vec3f delta = scene[0]._max - origin;
+			delta /= aabbRes;
 			vec2i edge = edges[tid];
 			intAABB bv;
 			if (active) {
@@ -2315,7 +2312,8 @@ namespace Lczx {
 			int tid = blockIdx.x * blockDim.x + threadIdx.x;
 			bool active = tid < Size;
 			vec3f origin = scene[0]._min;
-			vec3f delta = scene[0]._max;
+			vec3f delta = scene[0]._max - origin;
+			delta /= aabbRes;
 			vec2i edge = edges[tid];
 			intAABB bv;
 			if (active) {
